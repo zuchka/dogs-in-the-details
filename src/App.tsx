@@ -180,17 +180,29 @@ function App() {
     if (result.mode === 'live') recordLiveExport(customImage?.source ?? 'collection');
   }
 
-  function chooseArtwork(id: number) {
+  function clearDetectionForSourceChange() {
+    ++requestVersion.current;
     detectAbort.current?.abort();
     setResult(null);
+    setRunning(false);
+    setError('');
+  }
+
+  function chooseArtwork(id: number) {
+    if (!customImage && selectedId === id) return;
+    clearDetectionForSourceChange();
     setCustomImage(null);
     setSelectedId(id);
   }
 
   function chooseCustomImage(image: CustomImage) {
-    detectAbort.current?.abort();
-    setResult(null);
+    clearDetectionForSourceChange();
     setCustomImage(image);
+  }
+
+  function backToCollection() {
+    clearDetectionForSourceChange();
+    setCustomImage(null);
   }
 
   function moveArtwork(direction: number) {
@@ -234,7 +246,7 @@ function App() {
               <span className="collection-source">{customImage ? <>YOUR IMAGE <span className="separator">/</span> {customImage.source === 'upload' ? 'FROM YOUR DEVICE' : 'IMPORTED FROM A URL'}</> : <>ART INSTITUTE OF CHICAGO <span className="separator">/</span> PUBLIC DOMAIN</>}</span>
             </div>
 
-            <ImageImport active={!!customImage} onChoose={chooseCustomImage} onBack={() => { setResult(null); setCustomImage(null); }} />
+            <ImageImport key={selectedId} active={!!customImage} onChoose={chooseCustomImage} onBack={backToCollection} />
 
             {manifestError && !artwork ? (
               <div className="collection-error"><Info size={24} /><h2>The gallery is taking a moment.</h2><p>{manifestError}</p><button className="primary-button" onClick={() => window.location.reload()}>Try again <ArrowRight size={17} /></button></div>
@@ -288,7 +300,7 @@ function App() {
                 <div className="collection-strip-heading"><span>ANOTHER PAINTING, ANOTHER POSSIBILITY</span><span>{artworks.length} WORKS TO EXPLORE</span></div>
                 <div className="artwork-strip" aria-label="Choose an artwork">{artworks.map((item, index) => <button key={item.id} onClick={() => chooseArtwork(item.id)} className={`artwork-card ${!customImage && selectedId === item.id ? 'is-selected' : ''}`} aria-pressed={!customImage && selectedId === item.id}><span className="thumbnail-wrap"><img src={item.image} alt="" loading="lazy" /><span className="thumbnail-number">{String(index + 1).padStart(2, '0')}</span>{!customImage && selectedId === item.id && <span className="selected-label">ON VIEW <ArrowUpRight size={12} /></span>}</span><span className="artwork-card-title">{item.title}</span><span className="artwork-card-artist">{item.artist}</span></button>)}</div>
 
-                <div className="artwork-credit">{customImage ? <><span><span className="credit-dot" /> Your image stays outside the public collection.</span><button onClick={() => { setResult(null); setCustomImage(null); }}>Back to the museum collection <ArrowRight size={13} /></button></> : <><span><span className="credit-dot" /> Public-domain art, open to everyone.</span><a href={artwork.sourceUrl} target="_blank" rel="noreferrer">View this work at the Art Institute of Chicago <ArrowUpRight size={13} /></a></>}</div>
+                <div className="artwork-credit">{customImage ? <><span><span className="credit-dot" /> Your image stays outside the public collection.</span><button onClick={backToCollection}>Back to the museum collection <ArrowRight size={13} /></button></> : <><span><span className="credit-dot" /> Public-domain art, open to everyone.</span><a href={artwork.sourceUrl} target="_blank" rel="noreferrer">View this work at the Art Institute of Chicago <ArrowUpRight size={13} /></a></>}</div>
               </>
             )}
           </section>
