@@ -10,12 +10,17 @@ import { join } from 'node:path';
 const run = promisify(execFile);
 const root = fileURLToPath(new URL('../', import.meta.url));
 const runMissing = process.argv.includes('--run-missing');
+const modeIndex = process.argv.indexOf('--mode');
+const mode = modeIndex < 0 ? 'detection' : process.argv[modeIndex + 1];
+if (!['detection', 'segmentation'].includes(mode)) throw new Error('--mode must be detection or segmentation.');
+const captureDirectory = mode === 'segmentation' ? 'artifacts/segmentation' : 'artifacts/roboflow';
+const resultsDirectory = mode === 'segmentation' ? 'public/results-segmentation' : 'public/results';
 const artworks = JSON.parse(await readFile(join(root, 'public/artworks.json'), 'utf8'));
-await mkdir(join(root, 'public/results'), { recursive: true });
+await mkdir(join(root, resultsDirectory), { recursive: true });
 
 for (const artwork of artworks) {
-  const rawPath = join(root, `artifacts/roboflow/${artwork.id}.json`);
-  const normalizedPath = join(root, `artifacts/roboflow/${artwork.id}-normalized.json`);
+  const rawPath = join(root, `${captureDirectory}/${artwork.id}.json`);
+  const normalizedPath = join(root, `${captureDirectory}/${artwork.id}-normalized.json`);
   let result;
   try {
     result = JSON.parse(await readFile(normalizedPath, 'utf8'));
@@ -28,17 +33,18 @@ for (const artwork of artworks) {
     await run(process.execPath, [
       join(root, 'scripts/detect.mjs'), join(root, `public${artwork.image}`),
       '--artwork-id', String(artwork.id), '--raw-output', rawPath,
-      '--output', normalizedPath,
+      '--output', normalizedPath, '--mode', mode,
     ], { cwd: root, env: process.env });
     result = JSON.parse(await readFile(normalizedPath, 'utf8'));
   }
   if (result.artworkId !== artwork.id
+      || (result.inferenceMode ?? 'detection') !== mode
       || result.image.width !== artwork.width || result.image.height !== artwork.height
       || !Array.isArray(result.detections)) {
     throw new Error(`Captured response does not match artwork ${artwork.id}`);
   }
   const saved = { ...result, mode: 'saved' };
-  await writeFile(join(root, `public/results/${artwork.id}.json`), `${JSON.stringify(saved, null, 2)}\n`);
+  await writeFile(join(root, `${resultsDirectory}/${artwork.id}.json`), `${JSON.stringify(saved, null, 2)}\n`);
   const visible = saved.detections.filter(detection => detection.confidence >= 0.35);
-  console.log(`${artwork.id}: ${saved.detections.length} boxes at 0.10; ${visible.length} at 0.35; ${saved.durationMs} ms`);
+  console.log(`${artwork.id}: ${saved.detections.length} ${mode} candidates at 0.10; ${visible.length} at 0.35; ${saved.durationMs} ms`);
 }
