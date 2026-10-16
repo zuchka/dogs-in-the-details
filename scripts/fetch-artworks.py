@@ -15,7 +15,13 @@ import urllib.parse
 import urllib.request
 
 
-DEFAULT_IDS = [20697, 886, 896, 497, 561, 27992, 20684, 111436]
+DEFAULT_IDS = [
+    20697, 886, 896, 497, 561, 27992, 20684, 111436,
+    49068, 59907, 44775, 120104, 202666, 120081, 23333, 28136,
+    4081, 107938, 111062, 512, 16398, 110782, 101077, 39479,
+    69041, 109938, 93450, 97681, 12876, 209969, 57148, 12658,
+    75393, 39496, 104106, 81568, 250762, 8606, 111616, 57727,
+]
 USER_AGENT = "ArtSearchAssessment/0.1 (small public-domain demo)"
 API = "https://api.artic.edu/api/v1/artworks/"
 FIELDS = "id,title,artist_display,date_display,image_id,is_public_domain,artwork_type_title,credit_line"
