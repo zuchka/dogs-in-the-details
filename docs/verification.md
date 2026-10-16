@@ -24,7 +24,18 @@ A separate copy was downloaded from the public source link and extracted into a 
 
 The tests cover center-to-corner normalization, portrait/landscape dimensions, clipping, non-dog filtering, empty/malformed responses, approved image selection, oversized inputs, rate-limit responses, unavailable credentials, upstream failures, timeouts, cross-origin requests, and analytics validation. Tests mock hosted inference; the public-site check above verifies the actual hosted service.
 
-The artwork pilot is documented separately in [evaluation.md](evaluation.md). It is qualitative and deliberately includes failures. No custom training, segmentation, visitor uploads, or collection-wide benchmark was attempted.
+## Visitor-image extension
+
+The upload and image-URL extension was checked against real Roboflow inference through the local browser UI before deployment:
+
+- An uploaded copy of *Three Little Girls* returned one dog above the default 0.35 threshold in approximately 0.8 seconds.
+- A direct Art Institute image URL imported successfully through browser CORS and returned two dogs in approximately 0.5 seconds. The remote URL did not enter the inference API request.
+- A user-supplied 7,906,092-byte JPEG of the Rijksmuseum's *Banquet Still Life* was normalized from 6111 × 4785 to 2048 × 1604 pixels. Live inference returned the correct lower-right dog at approximately 74% confidence in 1.2 seconds. The nearby monkey was not displayed as a dog at the default threshold.
+- The Rijksmuseum collection-page URL was rejected with “This link must point directly to a JPEG, PNG, or WebP image.” This importer accepts image resources, not arbitrary web pages.
+- All 30 automated tests passed, along with TypeScript, the production build, and a Wrangler deployment dry run. Added cases cover image headers, dimensions, byte limits, animated-image rejection at the API, shared admission before reading upload bodies, source validation, and new/legacy export events.
+- The credential audit passed across tracked files, all Git objects, and the source archive. No configured secret value, token pattern, forbidden secret file, private home path, or personal commit email was found.
+
+The artwork pilot is documented separately in [evaluation.md](evaluation.md). It is qualitative and deliberately includes failures. No custom training, segmentation, or collection-wide benchmark was attempted.
 
 ## Recording and submission
 
