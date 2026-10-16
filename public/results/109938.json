@@ -1,0 +1,22 @@
+{
+  "artworkId": 109938,
+  "model": "rfdetr-medium (coco/40)",
+  "generatedAt": "2026-10-16T18:06:55.723Z",
+  "mode": "saved",
+  "durationMs": 330,
+  "image": {
+    "width": 843,
+    "height": 629
+  },
+  "detections": [
+    {
+      "id": "dog-18",
+      "label": "dog",
+      "confidence": 0.10266400873661041,
+      "x": 0.8457888493475683,
+      "y": 0.9332273449920508,
+      "width": 0.027283511269276306,
+      "height": 0.05405405405405406
+    }
+  ]
+}
