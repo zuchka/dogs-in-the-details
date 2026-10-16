@@ -18,7 +18,7 @@
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; scroll-padding-top: 24px; }
-body { margin: 0; min-width: 360px; }
+body { margin: 0; min-width: 0; }
 button, input { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 button { color: inherit; cursor: pointer; }
@@ -351,6 +351,23 @@ input[type='range']::-moz-range-thumb { width: 8px; height: 8px; background: #6b
   .intro-aside { gap: 0 18px; }
   .intro-aside > p { font-size: 25px; }
   .intro-description { font-size: 9px; }
+}
+
+@media (max-width: 360px) {
+  .masthead { gap: 12px; }
+  .wordmark { font-size: 7px; letter-spacing: .6px; }
+  h1 { font-size: 65px; letter-spacing: -2.7px; }
+  .title-period { font-size: 37px; top: -20px; margin-left: 4px; }
+  .introduction .eyebrow { font-size: 6px; letter-spacing: .7px; }
+  .intro-aside { gap: 0 14px; }
+  .intro-aside > p { font-size: 23px; }
+  .results-summary { flex-wrap: wrap; gap: 10px; }
+  .result-source { max-width: none; }
+  .empty-state { column-gap: 13px; }
+  .empty-state h3 { font-size: 27px; }
+  .collection-source { max-width: 137px; }
+  .collection-strip-heading { font-size: 6px; letter-spacing: .4px; }
+  .footer > span { line-height: 1.8; }
 }
 
 @media (prefers-reduced-motion: reduce) {
