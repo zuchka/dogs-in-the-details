@@ -2,9 +2,9 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
   ArrowDown, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight,
   Check, ChevronRight, Code2, Copy, Eye, EyeOff, Github, Info, LoaderCircle,
-  LayoutGrid, Scan, ScanLine, Search, Share2, X,
+  LayoutGrid, Scan, ScanLine, Search, Share2, Spline, Square, X,
 } from 'lucide-react';
-import type { Artwork, DisplayImage, Detection, DetectionResult, ImageSourceKind } from './types';
+import type { Artwork, DisplayImage, Detection, DetectionResult, ImageSourceKind, InferenceMode } from './types';
 import ImageImport from './ImageImport';
 import type { CustomImage } from './image-input';
 
@@ -49,6 +49,7 @@ function App() {
   const [browseAll, setBrowseAll] = useState(false);
   const [manifestError, setManifestError] = useState('');
   const [result, setResult] = useState<DetectionResult | null>(null);
+  const [inferenceMode, setInferenceMode] = useState<InferenceMode>('detection');
   const [threshold, setThreshold] = useState(DEFAULT_THRESHOLD);
   const [showBoxes, setShowBoxes] = useState(true);
   const [activeDetection, setActiveDetection] = useState<string | null>(null);
@@ -61,10 +62,14 @@ function App() {
   const requestVersion = useRef(0);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const detectAbort = useRef<AbortController | null>(null);
+  const resultCache = useRef(new Map<string, DetectionResult>());
 
   const collectionArtwork = artworks.find((item) => item.id === selectedId);
   const artwork = customImage ? { ...customImage, id: null, title: 'Your image', artist: '', date: '', credit: '', sourceUrl: '' } : collectionArtwork;
   const artworkIndex = artworks.findIndex((item) => item.id === selectedId);
+  const resultKey = `${customImage?.image ?? selectedId}:${inferenceMode}`;
+  const outlining = inferenceMode === 'segmentation';
+  const modelName = outlining ? 'RF-DETR Seg Medium' : 'RF-DETR Medium';
   const dogs = result?.detections.filter((dog) => dog.confidence >= threshold) ?? [];
   const normalizeSearch = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const searchTerms = normalizeSearch(collectionQuery).trim().split(/\s+/).filter(Boolean);
@@ -100,28 +105,41 @@ function App() {
     setRunning(false);
     setError('');
     setActiveDetection(null);
-    setImageLoaded(false);
-    setImageError(false);
+    setShowBoxes(true);
     const url = new URL(window.location.href);
     if (customImage) url.searchParams.delete('artwork');
     else url.searchParams.set('artwork', String(selectedId));
     window.history.replaceState({}, '', url);
-    if (customImage) return () => controller.abort();
-    fetch(`/results/${selectedId}.json`, { signal: controller.signal })
+    const cached = resultCache.current.get(resultKey);
+    if (cached) setResult(cached);
+    if (customImage || cached) return () => { controller.abort(); detectAbort.current?.abort(); };
+    fetch(`/${outlining ? 'results-segmentation' : 'results'}/${selectedId}.json`, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) return null;
         return response.json() as Promise<DetectionResult>;
       })
       .then((saved) => {
-        if (saved && saved.artworkId === selectedId && version === requestVersion.current) {
-          setResult({ ...saved, mode: 'saved' });
+        if (saved && saved.artworkId === selectedId && (saved.inferenceMode ?? 'detection') === inferenceMode && version === requestVersion.current) {
+          const savedResult: DetectionResult = { ...saved, mode: 'saved' };
+          resultCache.current.set(resultKey, savedResult);
+          setResult(savedResult);
         }
       })
       .catch(() => { /* Saved examples are optional. Live inference remains available. */ });
-    return () => controller.abort();
+    return () => { controller.abort(); detectAbort.current?.abort(); };
+  }, [selectedId, customImage, inferenceMode, resultKey, outlining]);
+
+  useEffect(() => {
+    setImageLoaded(false);
+    setImageError(false);
   }, [selectedId, customImage]);
 
-  useEffect(() => () => { if (customImage) URL.revokeObjectURL(customImage.image); }, [customImage]);
+  useEffect(() => () => {
+    if (!customImage) return;
+    URL.revokeObjectURL(customImage.image);
+    resultCache.current.delete(`${customImage.image}:detection`);
+    resultCache.current.delete(`${customImage.image}:segmentation`);
+  }, [customImage]);
 
   useEffect(() => {
     if (showHow) dialogRef.current?.showModal();
@@ -144,7 +162,8 @@ function App() {
     setActiveDetection(null);
     const timeout = window.setTimeout(() => controller.abort(), 90000);
     try {
-      const response = await fetch(customImage ? '/api/detect-upload' : '/api/detect', {
+      const endpoint = customImage ? '/api/detect-upload' : '/api/detect';
+      const response = await fetch(`${endpoint}${outlining ? '?mode=segmentation' : ''}`, {
         method: 'POST',
         headers: customImage ? { 'Content-Type': 'image/jpeg', 'X-Image-Source': customImage.source } : { 'Content-Type': 'application/json' },
         body: customImage ? customImage.blob : JSON.stringify({ artworkId: artwork.id }),
@@ -152,8 +171,11 @@ function App() {
       });
       const payload = await response.json() as DetectionResult & { error?: { code: string; message: string } };
       if (!response.ok) throw new Error(response.status === 429 ? 'A few too many requests at once. Please wait a minute before trying again.' : payload.error?.message ?? 'Detection could not finish. Please try again in a moment.');
+      if ((payload.inferenceMode ?? 'detection') !== inferenceMode) throw new Error('The requested model did not return a matching result. Please try again.');
       if (version === requestVersion.current) {
-        setResult({ ...payload, mode: 'live' });
+        const liveResult: DetectionResult = { ...payload, mode: 'live', inferenceMode };
+        resultCache.current.set(resultKey, liveResult);
+        setResult(liveResult);
         setShowBoxes(true);
       }
     } catch (failure) {
@@ -183,7 +205,7 @@ function App() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `dogs-in-the-details-${customImage ? customImage.source : artwork.id}.json`;
+    link.download = `dogs-in-the-details-${customImage ? customImage.source : artwork.id}${outlining ? '-outlines' : ''}.json`;
     link.click();
     URL.revokeObjectURL(url);
     if (result.mode === 'live') recordLiveExport(customImage?.source ?? 'collection');
@@ -204,6 +226,12 @@ function App() {
     setSelectedId(id);
   }
 
+  function chooseInferenceMode(mode: InferenceMode) {
+    if (mode === inferenceMode) return;
+    clearDetectionForSourceChange();
+    setInferenceMode(mode);
+  }
+
   function chooseCustomImage(image: CustomImage) {
     clearDetectionForSourceChange();
     setCustomImage(image);
@@ -219,7 +247,7 @@ function App() {
   }
 
   const exampleCode = [
-    'curl -X POST https://dogs.zuchka.dev/api/detect \\',
+    `curl -X POST 'https://dogs.zuchka.dev/api/detect${outlining ? '?mode=segmentation' : ''}' \\`,
     "  -H 'Content-Type: application/json' \\",
     `  -d '{"artworkId": ${artwork?.id ?? 27992}}'`,
   ].join('\n');
@@ -273,9 +301,15 @@ function App() {
                         {imageError ? <p className="painting-image-error">This painting could not be loaded. Choose another from the collection.</p> : (
                           <div className={`painting-stage ${imageLoaded ? 'is-loaded' : ''}`} style={{ '--art-ratio': artwork.width / artwork.height } as CSSProperties}>
                             <img key={artwork.image} src={artwork.image} alt={customImage ? 'Your image, ready for dog detection' : `${artwork.title}, ${artwork.date}, by ${artwork.artist}`} width={artwork.width} height={artwork.height} onLoad={() => setImageLoaded(true)} onError={() => setImageError(true)} />
-                            {showBoxes && !running && dogs.map((dog, index) => (
-                              <button key={dog.id} className={`detection-box ${activeDetection === dog.id ? 'is-active' : ''}`} style={{ left: `${dog.x * 100}%`, top: `${dog.y * 100}%`, width: `${dog.width * 100}%`, height: `${dog.height * 100}%` }} onClick={() => setActiveDetection(dog.id)} aria-label={`Dog ${index + 1}, ${Math.round(dog.confidence * 100)} percent confidence`}><span>{String(index + 1).padStart(2, '0')}</span></button>
-                            ))}
+                            {showBoxes && !running && dogs.map((dog, index) => !outlining || !dog.points?.length ? (
+                              <button key={dog.id} className={`detection-box ${activeDetection === dog.id ? 'is-active' : ''} ${outlining ? 'is-fallback' : ''}`} style={{ left: `${dog.x * 100}%`, top: `${dog.y * 100}%`, width: `${dog.width * 100}%`, height: `${dog.height * 100}%` }} onClick={() => setActiveDetection(dog.id)} aria-label={`Dog ${index + 1}, ${Math.round(dog.confidence * 100)} percent confidence${outlining ? ', outline unavailable' : ''}`}><span>{String(index + 1).padStart(2, '0')}</span></button>
+                            ) : null)}
+                            {showBoxes && !running && outlining && <>
+                              <svg className="mask-overlay" viewBox={`0 0 ${artwork.width} ${artwork.height}`} aria-label="Predicted dog outlines">
+                                {dogs.filter((dog) => dog.points?.length).map((dog) => <polygon key={dog.id} className={`segmentation-mask ${activeDetection === dog.id ? 'is-active' : ''}`} points={dog.points!.map((point) => `${point.x * artwork.width},${point.y * artwork.height}`).join(' ')} vectorEffect="non-scaling-stroke" role="button" tabIndex={0} onClick={() => setActiveDetection(dog.id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setActiveDetection(dog.id); } }} aria-label={`Dog ${dogs.indexOf(dog) + 1}, ${Math.round(dog.confidence * 100)} percent confidence`} />)}
+                              </svg>
+                              {dogs.filter((dog) => dog.points?.length).map((dog) => <span key={dog.id} className={`mask-number ${activeDetection === dog.id ? 'is-active' : ''}`} style={{ left: `${dog.x * 100}%`, top: `${dog.y * 100}%` }} aria-hidden="true">{String(dogs.indexOf(dog) + 1).padStart(2, '0')}</span>)}
+                            </>}
                             {running && <div className="scanning-line" aria-hidden="true" />}
                           </div>
                         )}
@@ -290,20 +324,28 @@ function App() {
 
                   <aside className="inspection-panel" aria-label="Dog detection results">
                     <div className="panel-heading"><span className="eyebrow">THE DETAILS</span><span className={`model-indicator ${running ? 'is-busy' : ''}`}><span /> RF-DETR</span></div>
+                    <div className="inference-mode-control">
+                      <div className="inference-mode-toggle" role="group" aria-label="Choose dog detection model" aria-describedby="inference-mode-description">
+                        <button type="button" aria-pressed={!outlining} onClick={() => chooseInferenceMode('detection')}><Square size={14} aria-hidden="true" /> Boxes</button>
+                        <button type="button" aria-pressed={outlining} onClick={() => chooseInferenceMode('segmentation')}><Spline size={15} aria-hidden="true" /> Outlines</button>
+                      </div>
+                      <p id="inference-mode-description">{modelName}<span> · </span>{outlining ? 'Predicts dog shapes' : 'Predicts dog locations'}. Switching models can change the candidates.</p>
+                    </div>
                     <div className="results-content" aria-live="polite" aria-busy={running}>
                       {running ? <div className="empty-state running-state"><span className="empty-state-icon"><Scan size={30} strokeWidth={1.2} /></span><h3>Taking a<br /><em>closer look.</em></h3><p>RF-DETR is looking for dogs in this painting. A first request can take a little longer.</p><div className="loading-dots"><span /><span /><span /></div></div> : result ? (
                         <>
                           <div className="results-summary"><h3>{dogs.length}<em>{dogs.length === 1 ? 'dog candidate' : 'dog candidates'}</em></h3><span className={`result-source ${result.mode === 'live' ? 'live' : ''}`}><span />{result.mode === 'saved' ? 'Saved Roboflow result' : 'Live Roboflow result'}</span></div>
                           {dogs.length ? <div className="dog-grid">{dogs.map((dog, index) => <button key={dog.id} className={`dog-card ${activeDetection === dog.id ? 'is-active' : ''}`} onClick={() => { setActiveDetection(dog.id); setShowBoxes(true); }} aria-label={`Highlight dog ${index + 1}`}><div className="crop-frame"><DogCrop artwork={artwork} detection={dog} /><span className="dog-number">{String(index + 1).padStart(2, '0')}</span><span className="crop-arrow"><ArrowUpRight size={15} /></span></div><span className="dog-card-caption"><span>Dog {String(index + 1).padStart(2, '0')}</span><span>{Math.round(dog.confidence * 100)}%</span></span></button>)}</div> : <div className="no-dogs"><Eye size={28} strokeWidth={1.2} /><p>{result.detections.length ? 'Try lowering the confidence threshold to reveal more candidates.' : 'No dogs detected in this painting. That’s a model result, not a guarantee—take a look yourself.'}</p></div>}
                           <p className="result-timestamp">{displayDate(result.generatedAt)}<span> · </span>{(result.durationMs / 1000).toFixed(1)}s inference</p>
+                          {outlining && dogs.some((dog) => !dog.points?.length) && <p className="outline-caveat">A dashed box marks a candidate without an outline.</p>}
                         </>
                       ) : <div className="empty-state"><span className="empty-state-icon"><Scan size={30} strokeWidth={1.2} /></span><h3>A familiar face,<br /><em>in an unexpected place.</em></h3><p>Sometimes center stage.<br />Sometimes hiding at the edge.<br />Let’s see who’s in this painting.</p></div>}
                     </div>
 
-                    {result && !running && <div className="result-controls"><div className="confidence-label"><label htmlFor="confidence">Minimum confidence</label><output htmlFor="confidence">{Math.round(threshold * 100)}%</output></div><input id="confidence" type="range" min="10" max="95" step="5" value={Math.round(threshold * 100)} onChange={(event) => setThreshold(Number(event.target.value) / 100)} style={{ '--range-progress': `${((threshold * 100 - 10) / 85) * 100}%` } as CSSProperties} /><div className="result-actions"><button onClick={() => setShowBoxes(!showBoxes)} aria-pressed={showBoxes}>{showBoxes ? <Eye size={14} /> : <EyeOff size={14} />}{showBoxes ? 'Hide boxes' : 'Show boxes'}</button><button onClick={downloadResult}><ArrowDownToLine size={14} /> JSON</button></div></div>}
+                    {result && !running && <div className="result-controls"><div className="confidence-label"><label htmlFor="confidence">Minimum confidence</label><output htmlFor="confidence">{Math.round(threshold * 100)}%</output></div><input id="confidence" type="range" min="10" max="95" step="5" value={Math.round(threshold * 100)} onChange={(event) => setThreshold(Number(event.target.value) / 100)} style={{ '--range-progress': `${((threshold * 100 - 10) / 85) * 100}%` } as CSSProperties} /><div className="result-actions"><button onClick={() => setShowBoxes(!showBoxes)} aria-pressed={showBoxes}>{showBoxes ? <Eye size={14} /> : <EyeOff size={14} />}{showBoxes ? 'Hide' : 'Show'} {outlining ? 'outlines' : 'boxes'}</button><button onClick={downloadResult}><ArrowDownToLine size={14} /> JSON</button></div></div>}
 
                     {error && <div className="inference-error" role="alert"><Info size={16} /><p>{error}{result && <span> The {result.mode} result above is from the previous successful run.</span>}</p></div>}
-                    <div className="detect-action">{customImage && <p className="upload-privacy">Find the dogs sends this prepared image to Roboflow. This app does not save your upload or add it to the gallery.</p>}<button className="primary-button" disabled={running || imageError} onClick={findDogs}>{running ? <><LoaderCircle className="spin" size={18} /> Looking closer…</> : <><ScanLine size={18} />{result ? 'Find the dogs again' : 'Find the dogs'}<ArrowRight size={17} /></>}</button><p>Live object detection, powered by <a href="https://roboflow.com" target="_blank" rel="noreferrer">Roboflow <ArrowUpRight size={10} /></a></p></div>
+                    <div className="detect-action">{customImage && <p className="upload-privacy">Find the dogs sends this prepared image to Roboflow. This app does not save your upload or add it to the gallery.</p>}<button className="primary-button" disabled={running || imageError} onClick={findDogs}>{running ? <><LoaderCircle className="spin" size={18} /> Looking closer…</> : <><ScanLine size={18} />{result ? 'Find the dogs again' : 'Find the dogs'}<ArrowRight size={17} /></>}</button><p>Live {outlining ? 'instance segmentation' : 'object detection'}, powered by <a href="https://roboflow.com" target="_blank" rel="noreferrer">Roboflow <ArrowUpRight size={10} /></a></p></div>
                   </aside>
                 </div>
 
@@ -323,7 +365,7 @@ function App() {
       </div>
 
       <dialog className="how-dialog" ref={dialogRef} onCancel={() => setShowHow(false)} onClick={(event) => { if (event.target === dialogRef.current) setShowHow(false); }}>
-        <div className="dialog-content"><div className="dialog-top"><span className="eyebrow">BEHIND THE DETAILS</span><button className="icon-button" onClick={() => setShowHow(false)} aria-label="Close explanation"><X size={20} /></button></div><h2>Art. An API.<br /><em>A fresh pair of eyes.</em></h2><p className="dialog-intro">This is object detection: finding a dog and drawing a box around it. The model predicts locations and confidence scores, not pixel-perfect segmentation or an art-historical interpretation.</p><ol className="how-steps"><li><span>01</span><div><h3>Start with an open collection</h3><p>Public-domain paintings and their metadata come from the Art Institute of Chicago. You can also upload your own image or import one from a public image URL. Imports are resized and stripped of embedded metadata in your browser.</p></div></li><li><span>02</span><div><h3>Let Roboflow run the model</h3><p>Our server sends the selected painting to Roboflow’s hosted RF-DETR object detector. The API key stays on the server. We keep the predictions labeled “dog.”</p></div></li><li><span>03</span><div><h3>Make the predictions visible</h3><p>Boxes locate each candidate. Crops let you inspect it. The confidence slider filters the returned predictions locally, without another model request.</p></div></li></ol><div className="developer-note"><Code2 size={19} /><div><h3>Try the demo API</h3><p>This endpoint powers the museum collection. Custom images use /api/detect-upload with prepared image bytes. The source includes both flows, setup instructions, and tests.</p></div></div><div className="code-block"><button aria-label="Copy API example" onClick={async () => { try { await navigator.clipboard.writeText(exampleCode); setCopied('code'); } catch { /* The code remains selectable. */ } }}>{copied === 'code' ? <Check size={15} /> : <Copy size={15} />}</button><pre>{exampleCode}</pre></div><p className="model-caveat"><Info size={15} /><span>Confidence is a model score, not a promise of correctness. RF-DETR was trained on photographs; paintings can produce missed dogs and false positives. Saved examples are labeled with their original run date.</span></p><a className="text-link" href="https://docs.roboflow.com/models/supported-models/rf-detr" target="_blank" rel="noreferrer">Explore RF-DETR on Roboflow <ChevronRight size={15} /></a><a className="source-download" href="https://github.com/zuchka/dogs-in-the-details" target="_blank" rel="noreferrer"><Code2 size={15} /> View the project on GitHub <ArrowUpRight size={12} /></a><a className="source-download" href="/dogs-in-the-details-source.zip" download><ArrowDownToLine size={15} /> Download the project source</a></div>
+        <div className="dialog-content"><div className="dialog-top"><span className="eyebrow">BEHIND THE DETAILS</span><button className="icon-button" onClick={() => setShowHow(false)} aria-label="Close explanation"><X size={20} /></button></div><h2>Art. An API.<br /><em>A fresh pair of eyes.</em></h2><p className="dialog-intro">Boxes locate dog candidates. Outlines trace their predicted shapes using instance segmentation. These are two RF-DETR models, so their candidates and confidence scores can differ. Neither gives an art-historical interpretation.</p><ol className="how-steps"><li><span>01</span><div><h3>Start with an open collection</h3><p>Public-domain paintings and their metadata come from the Art Institute of Chicago. You can also upload your own image or import one from a public image URL. Imports are resized and stripped of embedded metadata in your browser.</p></div></li><li><span>02</span><div><h3>Let Roboflow run the model</h3><p>Our server sends the painting to Roboflow’s hosted RF-DETR Medium detector or RF-DETR Seg Medium segmenter. Both are pretrained on COCO categories, including dogs; we use no text prompt or custom training. The API key stays on the server. We keep predictions labeled “dog.”</p></div></li><li><span>03</span><div><h3>Make the predictions visible</h3><p>Boxes or outlines show each candidate, and crops let you inspect it. Changing modes uses that model’s saved or previously run result when available; otherwise, click Find the dogs. The confidence slider filters predictions locally without another model request.</p></div></li></ol><div className="developer-note"><Code2 size={19} /><div><h3>Try the demo API</h3><p>This endpoint powers the museum collection. Custom images use /api/detect-upload with prepared image bytes. The source includes both flows, setup instructions, and tests.</p></div></div><div className="code-block"><button aria-label="Copy API example" onClick={async () => { try { await navigator.clipboard.writeText(exampleCode); setCopied('code'); } catch { /* The code remains selectable. */ } }}>{copied === 'code' ? <Check size={15} /> : <Copy size={15} />}</button><pre>{exampleCode}</pre></div><p className="model-caveat"><Info size={15} /><span>Confidence is a model score, not a promise of correctness. These RF-DETR checkpoints were trained on photographs; paintings can produce missed dogs, false positives, and imperfect outlines. Saved examples are labeled with their original run date.</span></p><a className="text-link" href="https://docs.roboflow.com/models/supported-models/rf-detr" target="_blank" rel="noreferrer">Explore RF-DETR on Roboflow <ChevronRight size={15} /></a><a className="source-download" href="https://github.com/zuchka/dogs-in-the-details" target="_blank" rel="noreferrer"><Code2 size={15} /> View the project on GitHub <ArrowUpRight size={12} /></a><a className="source-download" href="/dogs-in-the-details-source.zip" download><ArrowDownToLine size={15} /> Download the project source</a></div>
       </dialog>
     </>
   );
