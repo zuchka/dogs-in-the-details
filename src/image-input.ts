@@ -8,7 +8,6 @@ export interface CustomImage {
   width: number;
   height: number;
   blob?: Blob;
-  url?: string;
 }
 
 function ascii(bytes: Uint8Array, start: number, length: number) {
@@ -93,28 +92,48 @@ export async function prepareUpload(file: File): Promise<CustomImage> {
 export function validateImageUrl(input: string) {
   let url: URL;
   try { url = new URL(input.trim()); } catch { throw new Error('Paste a complete HTTPS link to an image.'); }
-  if (url.protocol !== 'https:' || url.username || url.password || url.hash) throw new Error('Use a public HTTPS image link without a password or URL fragment.');
+  if (url.protocol !== 'https:' || url.username || url.password || url.hash || url.port) throw new Error('Use a public HTTPS image link without a password, custom port, or URL fragment.');
   const hostname = url.hostname.toLowerCase();
   if (hostname === 'localhost' || hostname.endsWith('.localhost') || hostname.endsWith('.local') || !hostname.includes('.') || /^[\d.]+$/.test(hostname) || hostname.includes(':')) {
     throw new Error('Use a public image website, or upload the image from your device.');
   }
   if (url.href.length > 2048) throw new Error('This image link is too long. Please upload the image instead.');
+  if (typeof window !== 'undefined' && url.origin === window.location.origin && /^\/api(?:\/|$)/.test(decodeURIComponent(url.pathname))) throw new Error('Use a direct image link, or upload an image from your device.');
   return url.href;
 }
 
 export async function previewImageUrl(input: string): Promise<CustomImage> {
   const url = validateImageUrl(input);
-  const image = new Image();
-  image.referrerPolicy = 'no-referrer';
-  const timeout = window.setTimeout(() => { image.src = ''; }, 15000);
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 15000);
   try {
-    await new Promise<void>((resolve, reject) => {
-      image.onload = () => resolve();
-      image.onerror = () => reject(new Error('This link could not be previewed. Use a direct image URL, or download the image and upload it here.'));
-      image.src = url;
-    });
-    if (!image.naturalWidth || !image.naturalHeight || image.naturalWidth * image.naturalHeight > MAX_IMAGE_PIXELS) throw new Error('This image is too large to preview. Download a smaller version and upload it instead.');
-    return { source: 'url', image: url, url, width: image.naturalWidth, height: image.naturalHeight };
+    const response = await fetch(url, { mode: 'cors', credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error', signal: controller.signal });
+    if (!response.ok || !response.body) throw new Error('This image host did not return an image. Download the image and upload it here instead.');
+    const type = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase() ?? '';
+    if (!SUPPORTED_TYPES.includes(type)) throw new Error('This link must point directly to a JPEG, PNG, or WebP image.');
+    if (Number(response.headers.get('content-length')) > MAX_IMAGE_BYTES) throw new Error('This image is over 8 MB. Download a smaller version and upload it here.');
+    const reader = response.body.getReader();
+    const chunks: Uint8Array<ArrayBuffer>[] = [];
+    let size = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > MAX_IMAGE_BYTES) {
+          await reader.cancel();
+          throw new Error('This image is over 8 MB. Download a smaller version and upload it here.');
+        }
+        chunks.push(new Uint8Array(value));
+      }
+    } finally { reader.releaseLock(); }
+    const prepared = await prepareUpload(new File(chunks, 'imported-image', { type }));
+    return { ...prepared, source: 'url' };
+  } catch (failure) {
+    if (failure instanceof TypeError || (failure instanceof Error && failure.name === 'AbortError')) {
+      throw new Error('This host blocks image imports, redirects, or took too long to respond. Download the image and use Upload instead.');
+    }
+    throw failure;
   } finally {
     window.clearTimeout(timeout);
   }
