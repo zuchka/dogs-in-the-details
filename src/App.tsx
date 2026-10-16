@@ -199,7 +199,7 @@ function App() {
             </div>
             <div className="intro-aside">
               <span className="edition-label">A SMALL EXPERIMENT IN LOOKING</span>
-              <p>Old masters.<br />Very good dogs.</p>
+              <p>Great paintings.<br />Very good dogs.</p>
               <div className="intro-description">Explore a painting. Let Roboflow’s RF-DETR find its canine companions. See what a model notices—and what it misses.</div>
               <a href="#collection" className="text-link">Look a little closer <ArrowDown size={15} /></a>
             </div>
@@ -236,7 +236,7 @@ function App() {
                       <div className="mat-bottomline"><span>{running ? 'LOOKING FOR CANINE COMPANIONS…' : result ? `${dogs.length} ${dogs.length === 1 ? 'DETAIL' : 'DETAILS'} ABOVE ${Math.round(threshold * 100)}% CONFIDENCE` : 'EVERY PAINTING HAS MORE TO SEE'}</span><span className="mat-cross" aria-hidden="true">+</span></div>
                     </div>
                     <div className="painting-caption">
-                      <div><h2>{artwork.title}</h2><p>{artwork.artist}<span> · </span>{artwork.date}</p></div>
+                      <div><h2>{artwork.title}</h2><p>{artwork.artist}<span> · </span>{artwork.date}</p><p className="painting-credit">{artwork.credit}</p></div>
                       <div className="artwork-paging"><button className="icon-button" onClick={() => moveArtwork(-1)} aria-label="Previous artwork"><ArrowLeft size={17} /></button><span>{String(artworkIndex + 1).padStart(2, '0')}<span className="page-count"> / {String(artworks.length).padStart(2, '0')}</span></span><button className="icon-button" onClick={() => moveArtwork(1)} aria-label="Next artwork"><ArrowRight size={17} /></button></div>
                     </div>
                   </div>

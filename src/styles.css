@@ -76,6 +76,7 @@ h1 em { color: var(--accent); font-weight: 400; }
 .painting-caption h2 { font-family: var(--serif); font-size: 23px; font-weight: 400; margin: 0 0 6px; line-height: 1.12; }
 .painting-caption p { font-size: 10px; color: var(--muted); line-height: 1.5; margin: 0; }
 .painting-caption p > span { padding: 0 2px; }
+.painting-caption .painting-credit { font-size: 8px; color: #919787; margin-top: 6px; }
 .artwork-paging { display: flex; align-items: center; flex-shrink: 0; gap: 9px; padding-top: 1px; }
 .artwork-paging > span { font-size: 9px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .page-count { color: #92958b; }
@@ -289,6 +290,7 @@ input[type='range']::-moz-range-thumb { width: 8px; height: 8px; background: #6b
   .separator { padding: 0 4px; }
   .workbench { display: block; }
   .painting-mat { padding: 0 18px; }
+  .painting-space { height: auto; min-height: 160px; }
   .mat-topline { height: 37px; }
   .mat-bottomline { height: 37px; font-size: 6px; }
   .painting-caption { padding: 18px; flex-direction: row; min-height: auto; gap: 12px; }
