@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
   ArrowDown, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight,
   Check, ChevronRight, Code2, Copy, Eye, EyeOff, Info, LoaderCircle,
-  Scan, ScanLine, Share2, X,
+  LayoutGrid, Scan, ScanLine, Search, Share2, X,
 } from 'lucide-react';
 import type { Artwork, DisplayImage, Detection, DetectionResult, ImageSourceKind } from './types';
 import ImageImport from './ImageImport';
@@ -45,6 +45,8 @@ function App() {
   const [artworks, setArtworks] = useState<Artwork[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [customImage, setCustomImage] = useState<CustomImage | null>(null);
+  const [collectionQuery, setCollectionQuery] = useState('');
+  const [browseAll, setBrowseAll] = useState(false);
   const [manifestError, setManifestError] = useState('');
   const [result, setResult] = useState<DetectionResult | null>(null);
   const [threshold, setThreshold] = useState(DEFAULT_THRESHOLD);
@@ -64,6 +66,13 @@ function App() {
   const artwork = customImage ? { ...customImage, id: null, title: 'Your image', artist: '', date: '', credit: '', sourceUrl: '' } : collectionArtwork;
   const artworkIndex = artworks.findIndex((item) => item.id === selectedId);
   const dogs = result?.detections.filter((dog) => dog.confidence >= threshold) ?? [];
+  const normalizeSearch = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const searchTerms = normalizeSearch(collectionQuery).trim().split(/\s+/).filter(Boolean);
+  const searchingCollection = searchTerms.length > 0;
+  const matchingArtworks = artworks.map((item, index) => ({ item, index })).filter(({ item }) => {
+    const text = normalizeSearch(`${item.title} ${item.artist}`);
+    return searchTerms.every((term) => text.includes(term));
+  });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -254,7 +263,7 @@ function App() {
               <div className="collection-loading"><LoaderCircle className="spin" size={24} /><span>Opening the collection…</span></div>
             ) : (
               <>
-                <div className="workbench">
+                <div className="workbench" id="painting-viewer">
                   <div className="artwork-column">
                     <div className={`painting-mat ${running ? 'is-scanning' : ''}`}>
                       <div className="mat-topline"><span>{customImage ? 'YOUR IMAGE' : `PLATE ${String(artworkIndex + 1).padStart(2, '0')}`}</span>{!customImage && <button className="icon-button" onClick={shareArtwork} aria-label="Copy link to this artwork" title="Copy artwork link">{copied === 'share' ? <Check size={16} /> : <Share2 size={15} />}</button>}</div>
@@ -297,8 +306,9 @@ function App() {
                   </aside>
                 </div>
 
-                <div className="collection-strip-heading"><span>ANOTHER PAINTING, ANOTHER POSSIBILITY</span><span>{artworks.length} WORKS TO EXPLORE</span></div>
-                <div className="artwork-strip" aria-label="Choose an artwork">{artworks.map((item, index) => <button key={item.id} onClick={() => chooseArtwork(item.id)} className={`artwork-card ${!customImage && selectedId === item.id ? 'is-selected' : ''}`} aria-pressed={!customImage && selectedId === item.id}><span className="thumbnail-wrap"><img src={item.image} alt="" loading="lazy" /><span className="thumbnail-number">{String(index + 1).padStart(2, '0')}</span>{!customImage && selectedId === item.id && <span className="selected-label">ON VIEW <ArrowUpRight size={12} /></span>}</span><span className="artwork-card-title">{item.title}</span><span className="artwork-card-artist">{item.artist}</span></button>)}</div>
+                <div className="collection-strip-heading"><span>ANOTHER PAINTING, ANOTHER POSSIBILITY</span><span role="status" aria-live="polite">{searchingCollection ? `${matchingArtworks.length} OF ${artworks.length} WORKS` : `${artworks.length} WORKS TO EXPLORE`}</span></div>
+                <div className="collection-browser-controls"><div className="collection-search"><Search size={14} aria-hidden="true" /><label className="sr-only" htmlFor="collection-search">Search paintings by title or artist</label><input id="collection-search" type="search" placeholder="Search title or artist" value={collectionQuery} maxLength={100} onChange={(event) => setCollectionQuery(event.target.value)} />{collectionQuery && <button onClick={() => setCollectionQuery('')} aria-label="Clear collection search"><X size={13} /></button>}</div>{searchingCollection ? <span className="all-matches-label">ALL MATCHES SHOWN</span> : <button className="browse-all-button" onClick={() => setBrowseAll(!browseAll)} aria-expanded={browseAll} aria-controls="collection-artworks"><LayoutGrid size={13} />{browseAll ? 'Show a row' : 'Browse all'}<span>{artworks.length}</span></button>}</div>
+                {matchingArtworks.length ? <div id="collection-artworks" className={`artwork-strip ${browseAll || searchingCollection ? 'is-expanded' : ''}`} aria-label="Choose an artwork">{matchingArtworks.map(({ item, index }) => <button key={item.id} onClick={() => { chooseArtwork(item.id); document.getElementById('painting-viewer')?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }); }} className={`artwork-card ${!customImage && selectedId === item.id ? 'is-selected' : ''}`} aria-pressed={!customImage && selectedId === item.id} title={`${item.title} — ${item.artist}`}><span className="thumbnail-wrap"><img src={item.image} alt="" loading="lazy" /><span className="thumbnail-number">{String(index + 1).padStart(2, '0')}</span>{!customImage && selectedId === item.id && <span className="selected-label">ON VIEW <ArrowUpRight size={12} /></span>}</span><span className="artwork-card-title">{item.title}</span><span className="artwork-card-artist">{item.artist}</span></button>)}</div> : <div className="collection-no-matches" id="collection-artworks"><Search size={20} strokeWidth={1.3} /><p>No paintings match this search.<span>Try another title or artist.</span></p><button onClick={() => setCollectionQuery('')}>Show the collection <ArrowRight size={13} /></button></div>}
 
                 <div className="artwork-credit">{customImage ? <><span><span className="credit-dot" /> Your image stays outside the public collection.</span><button onClick={backToCollection}>Back to the museum collection <ArrowRight size={13} /></button></> : <><span><span className="credit-dot" /> Public-domain art, open to everyone.</span><a href={artwork.sourceUrl} target="_blank" rel="noreferrer">View this work at the Art Institute of Chicago <ArrowUpRight size={13} /></a></>}</div>
               </>
