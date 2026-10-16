@@ -1,0 +1,12 @@
+{
+  "artworkId": 20684,
+  "model": "rfdetr-medium (coco/40)",
+  "generatedAt": "2026-10-16T17:31:02.788Z",
+  "mode": "saved",
+  "durationMs": 492,
+  "image": {
+    "width": 843,
+    "height": 655
+  },
+  "detections": []
+}

@@ -1,0 +1,12 @@
+{
+  "artworkId": 111436,
+  "model": "rfdetr-medium (coco/40)",
+  "generatedAt": "2026-10-16T17:31:04.217Z",
+  "mode": "saved",
+  "durationMs": 343,
+  "image": {
+    "width": 843,
+    "height": 673
+  },
+  "detections": []
+}
