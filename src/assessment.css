@@ -1,0 +1,107 @@
+.assessment-page { max-width: 1320px; margin: 0 auto; padding: 0 64px; }
+.assessment-skip { position: absolute; top: -80px; left: 24px; padding: 14px; background: var(--paper); z-index: 10; }
+.assessment-skip:focus { top: 12px; }
+.assessment-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 88px; border-bottom: 1px solid var(--line); }
+.assessment-header-link { display: inline-flex; align-items: center; gap: 9px; font-size: 12px; min-height: 44px; }
+.assessment-header-link:hover { color: var(--accent); }
+.assessment-intro { padding-top: 48px; }
+.assessment-kicker { color: #727568; font-size: 9px; letter-spacing: 1.6px; font-weight: 600; line-height: 1.7; margin: 0 0 24px; }
+.assessment-intro-grid { display: grid; grid-template-columns: 1.5fr 1fr; align-items: end; gap: 60px; padding-bottom: 48px; }
+.assessment-intro h1 { font-size: clamp(68px, 7.8vw, 106px); line-height: .95; letter-spacing: -2.8px; }
+.assessment-intro-aside { max-width: 320px; justify-self: end; padding-bottom: 3px; }
+.assessment-intro-aside p { font-family: var(--serif); font-size: 32px; line-height: 1.1; margin: 0 0 16px; }
+.assessment-intro-aside > span { display: block; font-size: 12px; color: #727568; line-height: 1.8; max-width: 280px; }
+.assessment-index { display: flex; border-top: 1px solid var(--line); gap: 36px; padding: 14px 0; }
+.assessment-index a { display: inline-flex; gap: 12px; align-items: center; min-height: 44px; font-size: 11px; }
+.assessment-index a > span { color: var(--accent); font-size: 9px; }
+.assessment-index a:hover { color: var(--accent); }
+.assessment-section { padding-top: 18px; margin-bottom: 58px; scroll-margin-top: 24px; }
+.assessment-section-label { display: flex; gap: 14px; align-items: baseline; border-top: 1px solid var(--ink); padding: 18px 0 22px; }
+.assessment-section-label > span:first-child { font-size: 10px; color: var(--accent); }
+.assessment-section-label h2 { font-size: 12px; font-weight: 500; letter-spacing: .2px; margin: 0; }
+.assessment-word-count { margin-left: auto; color: #727568; font-size: 9px; letter-spacing: 1px; white-space: nowrap; }
+.assessment-demo-card { border: 1px solid var(--line); display: grid; grid-template-columns: 42% 1fr; }
+.assessment-artwork { display: flex; flex-direction: column; align-items: center; justify-content: center; background: #e9e9e0; padding: 30px; }
+.assessment-artwork img { display: block; width: 100%; height: 300px; object-fit: contain; transition: transform .2s; }
+.assessment-artwork:hover img { transform: scale(1.015); }
+.assessment-artwork > span { display: flex; align-items: center; gap: 12px; font-size: 8px; letter-spacing: 1.2px; margin-top: 22px; color: #666c5d; }
+.assessment-demo-copy { padding: 42px; align-self: center; }
+.assessment-demo-copy .assessment-kicker { font-size: 8px; margin-bottom: 18px; }
+.assessment-page h3 { font-family: var(--serif); font-size: 44px; line-height: 1.05; font-weight: 400; letter-spacing: -.6px; margin: 0 0 20px; }
+.assessment-page h3 em { color: var(--accent); font-weight: 400; }
+.assessment-demo-copy > p:not(.assessment-kicker), .assessment-video-copy > p:not(.assessment-kicker) { font-size: 12px; line-height: 1.85; color: #6b7162; margin: 0 0 14px; max-width: 420px; }
+.assessment-actions { display: flex; gap: 22px; flex-wrap: wrap; align-items: center; margin: 24px 0 14px; }
+.assessment-primary { display: inline-flex; align-items: center; justify-content: space-between; gap: 22px; min-height: 46px; padding: 12px 20px; background: var(--accent); color: white; font-size: 11px; }
+.assessment-primary:hover { background: #b44128; }
+.assessment-text-link { display: inline-flex; align-items: center; gap: 9px; min-height: 44px; font-size: 11px; }
+.assessment-text-link:hover, .assessment-small-link:hover { color: var(--accent); }
+.assessment-small-link { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-size: 10px; color: #6b7162; }
+.assessment-video-layout { display: grid; grid-template-columns: 1.75fr 1fr; gap: 42px; align-items: center; }
+.assessment-video-area { min-width: 0; }
+.assessment-video-area video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #24271f; }
+.assessment-video-pending { width: 100%; aspect-ratio: 16 / 9; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; background: #eeeee5; border: 1px solid var(--line); }
+.assessment-video-pending > svg { color: #89917b; margin-bottom: 18px; }
+.assessment-video-pending > p { font-family: var(--serif); font-size: 32px; margin: 0 0 10px; }
+.assessment-video-pending > span { font-size: 11px; color: #6b7162; line-height: 1.8; }
+.assessment-video-pending .assessment-status { font-size: 8px; letter-spacing: 1.25px; border: 1px solid #cdd1c2; padding: 4px 10px; margin-top: 23px; }
+.assessment-video-copy { padding: 14px 0; }
+.assessment-video-copy .assessment-kicker { font-size: 8px; margin-bottom: 16px; }
+.assessment-video-copy .assessment-text-link { display: flex; width: fit-content; }
+.assessment-video-error { font-size: 12px; line-height: 1.7; color: var(--accent); }
+.assessment-note-layout { display: grid; grid-template-columns: 1fr 1.75fr; gap: 42px; padding-top: 12px; }
+.assessment-note-layout aside { padding-top: 4px; }
+.assessment-note-layout aside .assessment-kicker { font-size: 8px; }
+.assessment-note-layout h3 { font-size: 38px; line-height: 1.08; }
+.assessment-note p { font-size: 14px; line-height: 1.95; margin: 0 0 22px; }
+.assessment-note p:last-child { margin-bottom: 0; }
+.assessment-footer { display: flex; justify-content: space-between; align-items: center; gap: 20px; border-top: 1px solid var(--line); padding: 22px 0 32px; font-size: 10px; color: #727568; }
+.assessment-footer a { display: inline-flex; gap: 10px; align-items: center; min-height: 44px; }
+.assessment-footer a:hover { color: var(--accent); }
+@media (max-width: 900px) {
+  .assessment-page { padding: 0 32px; }
+  .assessment-intro-grid { gap: 28px; }
+  .assessment-intro-aside p { font-size: 26px; }
+  .assessment-demo-copy { padding: 28px; }
+  .assessment-artwork { padding: 22px; }
+  .assessment-artwork img { height: 280px; }
+  .assessment-video-layout, .assessment-note-layout { gap: 28px; }
+  .assessment-page h3 { font-size: 38px; }
+}
+@media (max-width: 640px) {
+  .assessment-page { padding: 0 22px; }
+  .assessment-header { min-height: 76px; gap: 12px; }
+  .assessment-header .wordmark { font-size: 9px; gap: 7px; letter-spacing: .8px; }
+  .assessment-header-link { justify-content: center; width: 44px; }
+  .assessment-header-link > span, .assessment-header-link > svg:last-child { display: none; }
+  .assessment-intro { padding-top: 30px; }
+  .assessment-intro > .assessment-kicker { font-size: 8px; letter-spacing: 1px; }
+  .assessment-intro-grid { grid-template-columns: 1fr; padding-bottom: 24px; gap: 24px; }
+  .assessment-intro h1 { font-size: clamp(58px, 15vw, 82px); letter-spacing: -1.7px; }
+  .assessment-intro-aside { justify-self: start; max-width: none; }
+  .assessment-intro-aside p { font-size: 28px; }
+  .assessment-intro-aside > span { max-width: 340px; }
+  .assessment-index { gap: 0 18px; flex-wrap: wrap; padding: 10px 0; }
+  .assessment-index a { font-size: 10px; gap: 7px; }
+  .assessment-index a > svg { width: 12px; }
+  .assessment-section { margin-bottom: 36px; }
+  .assessment-section-label { gap: 10px; flex-wrap: wrap; }
+  .assessment-section-label h2 { font-size: 11px; }
+  .assessment-word-count { font-size: 8px; letter-spacing: .5px; }
+  .assessment-demo-card, .assessment-video-layout, .assessment-note-layout { grid-template-columns: 1fr; }
+  .assessment-artwork { padding: 24px; }
+  .assessment-artwork img { height: 260px; }
+  .assessment-demo-copy { padding: 26px 22px; }
+  .assessment-page h3 { font-size: 38px; }
+  .assessment-actions { gap: 12px 20px; }
+  .assessment-video-layout { gap: 14px; }
+  .assessment-video-pending { min-height: 250px; }
+  .assessment-video-pending > p { font-size: 30px; }
+  .assessment-note-layout { gap: 18px; }
+  .assessment-note-layout aside .assessment-kicker { margin-bottom: 16px; }
+  .assessment-note-layout h3 { margin-bottom: 10px; }
+  .assessment-note p { font-size: 13px; line-height: 1.9; }
+  .assessment-footer { flex-direction: column; align-items: flex-start; gap: 4px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .assessment-artwork img { transition: none; }
+}
