@@ -1,0 +1,67 @@
+# Hosted Roboflow integration
+
+The model runs on **Roboflow's Serverless Cloud API**. The browser renders the returned boxes; it does not run RF-DETR locally. No model training or GPU installation is required.
+
+## Model and request
+
+This demo pins `coco/40`, the project/version behind Roboflow's `rfdetr-medium` alias. The mapping was checked against [Roboflow's alias registry](https://github.com/roboflow/inference/blob/main/inference/models/aliases.py) on October 16, 2026. [The RF-DETR documentation](https://docs.roboflow.com/models/supported-models/rf-detr) describes the hosted model and its COCO training domain.
+
+The integration sends:
+
+```text
+POST https://serverless.roboflow.com/coco/40
+  ?confidence=0.1&overlap=0.5&max_detections=100&disable_active_learning=true
+Authorization: Bearer <server-side secret>
+Content-Type: application/x-www-form-urlencoded
+
+<base64 image bytes>
+```
+
+The key is never placed in a URL, returned to the browser, or included in logs. Current hosted API documentation recommends [header-based authentication](https://docs.roboflow.com/deployment/roboflow-cloud/serverless-api). The actual endpoint and parameters were checked against the hosted [OpenAPI specification](https://serverless.roboflow.com/openapi.json) and exercised with a real museum image.
+
+## Browser API
+
+- `GET /api/health` returns `{ "configured": true }` when the secret is present. This reports configuration, not a successful provider connection.
+- `POST /api/detect` accepts only `{ "artworkId": 886 }`. It reads the public-domain manifest and the corresponding bundled `/images/886.jpg` through the Worker asset binding. It never accepts an arbitrary URL or uploaded image.
+- Success returns the `DetectionResult` contract in `src/types.ts`, with `mode: "live"`, a timestamp, measured request duration, returned image dimensions, and dog detections. API responses use `Cache-Control: no-store`.
+- Errors return `{ "error": { "code": "...", "message": "..." } }`. A failed live run never becomes a saved or empty successful result.
+
+Saved examples are genuine earlier responses supplied by the application. Their display mode must be `saved`; refreshing the browser does not perform a live inference.
+
+## Reproduce one result
+
+Use Node 22.18 or later. Put the key in the ignored `.dev.vars` file as `ROBOFLOW_API_KEY=...`, or provide it through the process environment. The following call sends the local museum image to Roboflow and prints a normalized result:
+
+```sh
+node --env-file=.dev.vars scripts/detect.mjs public/images/886.jpg --artwork-id 886
+```
+
+To retain the raw provider response and normalized output for inspection:
+
+```sh
+node --env-file=.dev.vars scripts/detect.mjs public/images/886.jpg --artwork-id 886 \
+  --raw-output artifacts/roboflow/886.json \
+  --output artifacts/roboflow/886-normalized.json
+```
+
+`artifacts/` is ignored by Git. The script records the freshly executed result as `live`; change the display mode to `saved` when packaging it as a saved example, preserving its actual timestamp. These commands consume hosted inference credits.
+
+## Coordinates and interpretation
+
+Roboflow returns `(x, y)` as a box's center in pixels. For returned image width `W` and height `H`, the top-left corner is `((x - width/2)/W, (y - height/2)/H)`. The other corner is normalized the same way. Both corners are clamped to `[0, 1]`; zero-area boxes outside the image are discarded. We use the **returned image dimensions**, not the museum's original dimensions.
+
+The parser retains only `class: "dog"` at a score of at least `0.1`. The interface can apply a higher threshold locally without making another inference call. Scores are model confidence values, not calibrated probabilities. Low thresholds may expose duplicate predictions, misses, and false positives. Painted dogs differ from the photographs in COCO; these examples are a demonstration, not a validated collection-wide accuracy estimate.
+
+## Limits and failures
+
+The Worker caps request JSON at 1 KB, image bytes at 8 MB, and the provider response at 2 MB. Roboflow's documented upload limit is 20 MB. A 55-second timeout allows for model cold starts; no automatic retry spends another request without a new user action. Authentication, quota, malformed-output, rate-limit, and timeout states have distinct safe error codes.
+
+The `INFERENCE_RATE_LIMITER` binding admits six requests per minute per network address at a Cloudflare location. Shared networks share this allowance. Cloudflare's limiter is eventually consistent and **is not a global billing cap**. See [Cloudflare's rate-limit behavior](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/) and [Roboflow's cold-start and error guidance](https://docs.roboflow.com/deployment/production-checklist).
+
+## Friction encountered
+
+The MCP single-model tool rejected the short `rfdetr-medium` alias; using the pinned model version `coco/40` removed that ambiguity. Museum image URL inference then received an HTTP 403 while the same image could be downloaded locally. Sending the bundled JPEG as base64 succeeded. The application therefore uses the exact local copy shown in its gallery, avoiding a second museum fetch during live inference. A documented alias-to-endpoint mapping and a URL-fetch diagnostic suggesting byte upload would make this path easier to discover.
+
+## Verification
+
+`npm test` covers normalization in portrait and landscape images, boundary clipping, empty results, confidence filtering, corrupt responses, rejected artwork IDs/URLs, bounded requests, private header transport, rate limits, and sanitized provider failures. The first real hosted test on artwork 886 returned dog predictions in approximately 1.08 seconds; that single request is not a latency benchmark.
