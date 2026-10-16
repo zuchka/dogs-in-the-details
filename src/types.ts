@@ -1,13 +1,18 @@
-export interface Artwork {
-  id: number;
+export type ImageSourceKind = 'collection' | 'upload' | 'url';
+
+export interface DisplayImage {
   title: string;
-  artist: string;
-  date: string;
   image: string;
-  imageId: string;
-  sourceUrl: string;
   width: number;
   height: number;
+}
+
+export interface Artwork extends DisplayImage {
+  id: number;
+  artist: string;
+  date: string;
+  imageId: string;
+  sourceUrl: string;
   credit: string;
   publicDomain: true;
   note?: string;
@@ -25,7 +30,9 @@ export interface Detection {
 }
 
 export interface DetectionResult {
-  artworkId: number;
+  artworkId: number | null;
+  // Older saved collection fixtures omit this field.
+  source?: ImageSourceKind;
   model: string;
   generatedAt: string;
   mode: 'live' | 'saved';
