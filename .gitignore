@@ -5,5 +5,7 @@ dist/
 .env*
 !.env.example
 .DS_Store
+__pycache__/
+*.py[cod]
 artifacts/
 public/dogs-in-the-details-source.zip
