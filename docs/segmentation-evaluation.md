@@ -16,6 +16,8 @@ The service returned candidates down to 10% confidence. The table describes the 
 
 The masks followed the main bodies well enough to make the outline interaction useful. Fine boundaries, thin features, and occluded regions should be inspected rather than treated as exact. Small dogs can fall below a chosen confidence threshold, while other animals can pass it.
 
+The website's upload path was then checked separately through the local Worker and real hosted inference. The browser prepared the still life at 2048 × 1604 pixels; the correct lower-right dog scored 77.7% with 689 polygon points. The original Boxes mode returned the same dog's box at approximately 74%. Toggling reused each mode's successful result, and the exported JSON retained the segmentation model and normalized points. Resolution and preprocessing can change predictions, so the original-resolution score above is not a promise for uploads.
+
 After this spot-check, we captured and normalized segmentation responses for all 40 bundled paintings, separately from their original box-detector results. All 40 files record the selected checkpoint and saved provenance. Capturing the full gallery is not a visual accuracy review of all 40 paintings; the qualitative observations above cover only the three inspected examples.
 
 ## Reproduction

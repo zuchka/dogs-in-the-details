@@ -39,7 +39,7 @@ After deployment, the public site repeated both paths successfully. The Rijksmus
 
 The public GitHub repository is [zuchka/dogs-in-the-details](https://github.com/zuchka/dogs-in-the-details). Its focused commit history was preserved; secret files and the user-supplied test image were not published.
 
-The artwork pilot is documented separately in [evaluation.md](evaluation.md). It is qualitative and deliberately includes failures. No custom training, segmentation, or collection-wide benchmark was attempted.
+The artwork pilot is documented separately in [evaluation.md](evaluation.md). It is qualitative and deliberately includes failures. That initial pilot did not include custom training, segmentation, or a collection-wide benchmark. The later segmentation extension is documented below.
 
 ## Forty-work gallery expansion
 
@@ -50,6 +50,16 @@ The artwork pilot is documented separately in [evaluation.md](evaluation.md). It
 - The browser loaded the new *Landscape with Dog* example with a 92% dog candidate. Accent-insensitive search for `raffaelli` returned two works; selecting *Notre Dame de Paris* opened its saved result and correct plate number. An unmatched query showed a clear empty state.
 - “Browse all” displayed all 40 cards in a five-column desktop grid and a two-column grid at 375 CSS pixels, with no horizontal page overflow.
 - All 30 tests, TypeScript, the production build, and the credential audit passed after the expansion.
+
+## Optional outlines extension
+
+- Three paintings were visually checked with hosted RF-DETR Seg Medium before adding Outlines. The observations, including the monkey false positive in La Grande Jatte, are in [segmentation-evaluation.md](segmentation-evaluation.md).
+- All 40 separate segmentation fixtures match their captured responses, image IDs, and dimensions. Their 141 candidates contain 44,004 finite polygon points within normalized image bounds. The original box fixtures are byte-for-byte unchanged.
+- All 35 automated tests, TypeScript, the production build, Wrangler dry run, and credential audit passed. New tests cover polygon validation, whole-image coordinate conversion, explicit model selection, and uploaded segmentation.
+- Chrome checks verified box/outline switching, reuse of successful results for both upload modes, keyboard polygon selection, hide/show controls, and the selected mode in share links. At 390 CSS pixels, the page had no horizontal overflow and both mode buttons were 44 pixels tall.
+- The resized Rijksmuseum upload (2048 × 1604) returned the correct dog at 77.7% in Outlines mode and 73.7% in Boxes mode. Its downloaded outline JSON recorded `source: upload`, `artworkId: null`, the segmentation checkpoint, and 689 points on the visible dog. These checks ran through the local Worker and the real hosted models.
+- On dogs.zuchka.dev, fresh segmentation returned the standing dog in artwork 886 at 90.4%. Switching to Boxes restored its original saved 68.4% candidate; a separate fresh production box request also succeeded. The public source ZIP matched the audited local archive.
+- The original box-only source remains available at the [boxes-fallback tag](https://github.com/zuchka/dogs-in-the-details/tree/boxes-fallback). Boxes also remains the default in the deployed interface.
 
 ## Recording and submission
 
