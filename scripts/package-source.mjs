@@ -3,8 +3,8 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 
 // Archive only committed files. Git-ignored credentials and build output cannot enter it.
-const changed = execFileSync('git', ['status', '--porcelain', '--untracked-files=no'], { encoding: 'utf8' });
-if (changed.trim()) throw new Error('Commit tracked changes before packaging a reproducible source snapshot.');
+const changed = execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' });
+if (changed.trim()) throw new Error('Commit source changes and new files before packaging a reproducible source snapshot.');
 mkdirSync('public', { recursive: true });
 execFileSync('git', [
   'archive', '--format=zip', '--prefix=dogs-in-the-details/',
