@@ -1,40 +1,68 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
-import { inspectImage, resizedDimensions, validateImageUrl } from '../src/image-input.ts';
+import { readFileSync } from 'node:fs';
+import { test } from 'node:test';
+import { inspectImage, InvalidImage, MAX_IMAGE_BYTES } from '../worker/image-input.ts';
 
-test('image dimensions are inspected before browser decoding', () => {
-  const png = new Uint8Array(24);
-  png.set([137, 80, 78, 71], 0);
-  png.set([73, 72, 68, 82], 12);
-  const data = new DataView(png.buffer);
-  data.setUint32(16, 843);
-  data.setUint32(20, 565);
-  assert.deepEqual(inspectImage(png, 'image/png'), { width: 843, height: 565 });
-  data.setUint32(16, 10000);
-  data.setUint32(20, 10000);
-  assert.throws(() => inspectImage(png, 'image/png'), /40 megapixels/);
+const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=', 'base64');
+
+function webp(width: number, height: number, extended = false): Buffer {
+  // Structural header fixtures: pixel decoding belongs to the inference provider.
+  const chunk = Buffer.alloc(18);
+  chunk.write('VP8 ', 0);
+  chunk.writeUInt32LE(10, 4);
+  chunk.set([0x9d, 0x01, 0x2a], 11);
+  chunk.writeUInt16LE(width, 14);
+  chunk.writeUInt16LE(height, 16);
+  const vp8x = Buffer.alloc(18);
+  vp8x.write('VP8X', 0);
+  vp8x.writeUInt32LE(10, 4);
+  vp8x.writeUIntLE(width - 1, 12, 3);
+  vp8x.writeUIntLE(height - 1, 15, 3);
+  const body = Buffer.concat(extended ? [vp8x, chunk] : [chunk]);
+  const header = Buffer.alloc(12);
+  header.write('RIFF', 0);
+  header.writeUInt32LE(body.length + 4, 4);
+  header.write('WEBP', 8);
+  return Buffer.concat([header, body]);
+}
+
+test('validates real JPEG and PNG dimensions, including a sliced typed array', () => {
+  const jpeg = readFileSync(new URL('../public/images/886.jpg', import.meta.url));
+  assert.deepEqual(inspectImage(jpeg, 'image/jpeg'), { width: 843, height: 1241 });
+  assert.deepEqual(inspectImage(png, 'image/png'), { width: 1, height: 1 });
+  const padded = Buffer.concat([Buffer.from([1, 2]), png]);
+  assert.deepEqual(inspectImage(padded.subarray(2), 'image/png'), { width: 1, height: 1 });
 });
 
-test('JPEG and WebP dimensions can be read without decoding the image', () => {
-  const jpeg = new Uint8Array([255, 216, 255, 224, 0, 4, 0, 0, 255, 192, 0, 8, 8, 2, 53, 3, 75, 0]);
-  assert.deepEqual(inspectImage(jpeg, 'image/jpeg'), { width: 843, height: 565 });
-  const webp = new Uint8Array(30);
-  webp.set(new TextEncoder().encode('RIFF'), 0);
-  webp.set(new TextEncoder().encode('WEBPVP8X'), 8);
-  webp.set([74, 3, 0, 52, 2, 0], 24);
-  assert.deepEqual(inspectImage(webp, 'image/webp'), { width: 843, height: 565 });
-  assert.throws(() => inspectImage(jpeg.subarray(0, 13), 'image/jpeg'), /could not be read/);
+test('reads lossy, extended, and lossless WebP declared dimensions', () => {
+  for (const extended of [false, true]) assert.deepEqual(inspectImage(webp(640, 480, extended), 'image/webp'), { width: 640, height: 480 });
+  const lossless = Buffer.alloc(26);
+  lossless.write('RIFF', 0); lossless.writeUInt32LE(18, 4); lossless.write('WEBPVP8L', 8); lossless.writeUInt32LE(5, 16);
+  lossless[20] = 0x2f; lossless.writeUInt32LE((639 | (479 << 14)) >>> 0, 21);
+  assert.deepEqual(inspectImage(lossless, 'image/webp'), { width: 640, height: 480 });
 });
 
-test('output keeps orientation and aspect ratio while limiting the longest edge', () => {
-  assert.deepEqual(resizedDimensions(4032, 3024), { width: 2048, height: 1536 });
-  assert.deepEqual(resizedDimensions(3024, 4032), { width: 1536, height: 2048 });
-  assert.deepEqual(resizedDimensions(843, 565), { width: 843, height: 565 });
+test('rejects mismatched content types, SVG, empty, truncated, and malformed containers', () => {
+  for (const [bytes, type] of [
+    [png, 'image/jpeg'], [Buffer.from('<svg/>'), 'image/svg+xml'], [Buffer.alloc(0), 'image/png'],
+    [png.subarray(0, -1), 'image/png'], [webp(10, 10).subarray(0, -1), 'image/webp'],
+    [Buffer.from([255, 216, 255, 192, 0, 20, 255, 217]), 'image/jpeg'],
+  ] as const) assert.throws(() => inspectImage(bytes, type), InvalidImage);
 });
 
-test('image links permit public HTTPS but reject local hosts and credentials', () => {
-  assert.equal(validateImageUrl(' https://www.artic.edu/iiif/image.jpg?size=843 '), 'https://www.artic.edu/iiif/image.jpg?size=843');
-  for (const url of ['http://example.com/a.jpg', 'https://localhost/a.jpg', 'https://127.0.0.1/a.jpg', 'https://192.168.1.1/a.jpg', 'https://[::1]/a.jpg', 'https://name:secret@example.com/a.jpg', 'https://example.com/a.jpg#fragment', 'file:///tmp/a.jpg']) {
-    assert.throws(() => validateImageUrl(url));
+test('rejects oversized byte payloads, declared sides, pixels, and zero dimensions', () => {
+  assert.throws(() => inspectImage(new Uint8Array(MAX_IMAGE_BYTES + 1), 'image/jpeg'), /8 MiB/);
+  for (const [width, height] of [[0, 1], [10_001, 1], [5000, 5000]]) {
+    const oversized = Buffer.from(png); oversized.writeUInt32BE(width, 16); oversized.writeUInt32BE(height, 20);
+    assert.throws(() => inspectImage(oversized, 'image/png'), /megapixels/);
   }
+});
+
+test('rejects animated PNG/WebP and mismatched WebP canvas size', () => {
+  const animation = Buffer.alloc(20); animation.writeUInt32BE(8, 0); animation.write('acTL', 4);
+  assert.throws(() => inspectImage(Buffer.concat([png.subarray(0, 33), animation, png.subarray(33)]), 'image/png'), /Animated/);
+  const animated = webp(10, 10, true); animated[20] = 0x02;
+  assert.throws(() => inspectImage(animated, 'image/webp'), /Animated/);
+  const mismatched = webp(10, 10, true); mismatched[24] = 20;
+  assert.throws(() => inspectImage(mismatched, 'image/webp'), InvalidImage);
 });
