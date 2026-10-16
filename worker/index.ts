@@ -1,5 +1,5 @@
-import type { DetectionResult, ImageSourceKind } from '../src/types.ts';
-import { CONFIDENCE_FLOOR, InvalidInferenceResponse, MODEL_ID, MODEL_NAME, normalizeDetections } from './detections.ts';
+import type { DetectionResult, ImageSourceKind, InferenceMode } from '../src/types.ts';
+import { CONFIDENCE_FLOOR, InvalidInferenceResponse, MODEL_ID, MODEL_NAME, SEGMENTATION_MODEL_ID, SEGMENTATION_MODEL_NAME, normalizeDetections } from './detections.ts';
 import { inspectImage, InvalidImage, MAX_IMAGE_BYTES } from './image-input.ts';
 
 const TIMEOUT_MS = 55_000;
@@ -119,8 +119,10 @@ async function admitInference(request: Request, env: HandlerEnv): Promise<string
 }
 
 async function runInference(image: Uint8Array, apiKey: string, artworkId: number | null,
-  source: ImageSourceKind, inferFetch: typeof fetch): Promise<DetectionResult> {
-  const inferenceUrl = new URL(`https://serverless.roboflow.com/${MODEL_ID}`);
+  source: ImageSourceKind, inferenceMode: InferenceMode, inferFetch: typeof fetch): Promise<DetectionResult> {
+  const modelId = inferenceMode === 'segmentation' ? SEGMENTATION_MODEL_ID : MODEL_ID;
+  const modelName = inferenceMode === 'segmentation' ? SEGMENTATION_MODEL_NAME : MODEL_NAME;
+  const inferenceUrl = new URL(`https://serverless.roboflow.com/${modelId}`);
   inferenceUrl.search = new URLSearchParams({
     confidence: String(CONFIDENCE_FLOOR), overlap: '0.5', max_detections: '100', disable_active_learning: 'true',
   }).toString();
@@ -138,7 +140,7 @@ async function runInference(image: Uint8Array, apiKey: string, artworkId: number
     throw new InvalidInferenceResponse();
   }
   return {
-    artworkId, source, model: MODEL_NAME, mode: 'live', generatedAt: new Date().toISOString(),
+    artworkId, source, inferenceMode, model: modelName, mode: 'live', generatedAt: new Date().toISOString(),
     durationMs: Date.now() - started, ...normalizeDetections(raw),
   };
 }
@@ -155,6 +157,10 @@ export async function handleRequest(request: Request, env: HandlerEnv, inferFetc
     if (request.method !== 'POST') return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Use POST.' } }, 405, { Allow: 'POST' });
     const origin = request.headers.get('origin');
     if (origin && origin !== url.origin) throw new HttpError(403, 'INVALID_ORIGIN', 'Use the demo website to request inference.');
+    const inferenceMode = url.searchParams.get('mode') ?? 'detection';
+    if (inferenceMode !== 'detection' && inferenceMode !== 'segmentation') {
+      throw new HttpError(400, 'INVALID_MODE', 'Choose detection (boxes) or segmentation (outlines).');
+    }
     const contentType = request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() ?? '';
     if (url.pathname === '/api/detect-upload') {
       if (!['image/jpeg', 'image/png', 'image/webp'].includes(contentType)) {
@@ -166,7 +172,7 @@ export async function handleRequest(request: Request, env: HandlerEnv, inferFetc
       const apiKey = await admitInference(request, env);
       const image = await readBounded(request, MAX_IMAGE_BYTES);
       inspectImage(image, contentType);
-      return json(await runInference(image, apiKey, null, source, inferFetch));
+      return json(await runInference(image, apiKey, null, source, inferenceMode, inferFetch));
     }
     if (contentType !== 'application/json') {
       throw new HttpError(415, 'CONTENT_TYPE', 'Send application/json.');
@@ -203,7 +209,7 @@ export async function handleRequest(request: Request, env: HandlerEnv, inferFetc
     const artworkId = body.artworkId;
     const apiKey = await admitInference(request, env);
     const image = await getArtworkImage(url, env, artworkId);
-    return json(await runInference(image, apiKey, artworkId, 'collection', inferFetch));
+    return json(await runInference(image, apiKey, artworkId, 'collection', inferenceMode, inferFetch));
   } catch (error) {
     if (error instanceof HttpError) {
       return json({ error: { code: error.code, message: error.message } }, error.status,

@@ -63,6 +63,31 @@ test('unknown artwork, arbitrary URL, and invalid IDs never reach Roboflow', asy
   }
 });
 
+test('segmentation explicitly selects its pinned checkpoint and returns normalized polygons', async () => {
+  const original = request();
+  const segmentation = new Request(`${original.url}?mode=segmentation`, original);
+  const response = await handleRequest(segmentation, environment(), async (input) => {
+    assert.equal(new URL(String(input)).pathname, '/coco-dataset-vdnr1/37');
+    return Response.json({ ...raw, predictions: [{ ...raw.predictions[0], points: [
+      { x: 400, y: 200 }, { x: 600, y: 200 }, { x: 500, y: 300 },
+    ] }] });
+  });
+  assert.equal(response.status, 200);
+  const result = await response.json() as DetectionResult;
+  assert.equal(result.inferenceMode, 'segmentation');
+  assert.equal(result.model, 'rfdetr-seg-medium (coco-dataset-vdnr1/37)');
+  assert.deepEqual(result.detections[0].points, [{ x: .4, y: .4 }, { x: .6, y: .4 }, { x: .5, y: .6 }]);
+});
+
+test('unrecognized model modes are rejected without inference', async () => {
+  for (const route of ['/api/detect', '/api/detect-upload']) {
+    const invalid = new Request(`https://demo.test${route}?mode=arbitrary-model`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"artworkId":886}',
+    });
+    assert.equal((await handleRequest(invalid, environment(), neverFetch)).status, 400);
+  }
+});
+
 test('missing key and rate limit fail explicitly without calling inference', async () => {
   const missing = await handleRequest(request(), environment({ key: '' }), neverFetch);
   assert.equal(missing.status, 503);
