@@ -40,6 +40,26 @@ test('an empty prediction list is a valid no-detection result', () => {
   assert.deepEqual(normalizeDetections(response([])).detections, []);
 });
 
+test('segmentation points use whole-image dimensions and preserve the box fallback', () => {
+  const { detections } = normalizeDetections(response([{ ...dog, points: [
+    { x: 150, y: 50 }, { x: 350, y: 50 }, { x: 250, y: 150 },
+  ] }]));
+  assert.deepEqual(detections[0].points, [{ x: .15, y: .1 }, { x: .35, y: .1 }, { x: .25, y: .3 }]);
+  assert.equal(detections[0].x, .15);
+  assert.equal(detections[0].y, .1);
+  assert.equal(normalizeDetections(response([{ ...dog, points: [] }])).detections[0].points, undefined);
+});
+
+test('polygon coordinates are bounded and malformed masks are rejected', () => {
+  const { detections } = normalizeDetections(response([{ ...dog, points: [
+    { x: -5, y: -3 }, { x: 1100, y: 550 }, { x: 250, y: 150 },
+  ] }]));
+  assert.deepEqual(detections[0].points?.slice(0, 2), [{ x: 0, y: 0 }, { x: 1, y: 1 }]);
+  for (const points of ['invalid', [{ x: NaN, y: 5 }], [{ x: 4, y: '5' }], Array(20_001).fill({ x: 1, y: 1 })]) {
+    assert.throws(() => normalizeDetections(response([{ ...dog, points }])), InvalidInferenceResponse);
+  }
+});
+
 test('rejects malformed response shape and nonfinite dimensions', () => {
   for (const raw of [null, [], {}, { image: { width: 0, height: 500 }, predictions: [] },
     { image: { width: 1000, height: Infinity }, predictions: [] },

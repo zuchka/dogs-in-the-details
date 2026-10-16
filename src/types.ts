@@ -1,4 +1,5 @@
 export type ImageSourceKind = 'collection' | 'upload' | 'url';
+export type InferenceMode = 'detection' | 'segmentation';
 
 export interface DisplayImage {
   title: string;
@@ -27,12 +28,16 @@ export interface Detection {
   y: number;
   width: number;
   height: number;
+  // Optional segmentation polygon, in the same whole-image coordinate space.
+  points?: { x: number; y: number }[];
 }
 
 export interface DetectionResult {
   artworkId: number | null;
   // Older saved collection fixtures omit this field.
   source?: ImageSourceKind;
+  // Older box fixtures omit this field and remain valid.
+  inferenceMode?: InferenceMode;
   model: string;
   generatedAt: string;
   mode: 'live' | 'saved';

@@ -3,6 +3,9 @@ import type { Detection, DetectionResult } from '../src/types.ts';
 // Pinned resolution of Roboflow's rfdetr-medium alias, verified in its SDK.
 export const MODEL_ID = 'coco/40';
 export const MODEL_NAME = 'rfdetr-medium (coco/40)';
+// RF-DETR Seg Medium alias verified against Roboflow's inference SDK.
+export const SEGMENTATION_MODEL_ID = 'coco-dataset-vdnr1/37';
+export const SEGMENTATION_MODEL_NAME = 'rfdetr-seg-medium (coco-dataset-vdnr1/37)';
 export const CONFIDENCE_FLOOR = 0.1;
 
 export class InvalidInferenceResponse extends Error {
@@ -50,9 +53,24 @@ export function normalizeDetections(raw: unknown): Pick<DetectionResult, 'image'
     const right = clamp((x + boxWidth / 2) / width);
     const bottom = clamp((y + boxHeight / 2) / height);
     if (right <= left || bottom <= top) continue;
+    let points: Detection['points'];
+    if (prediction.points !== undefined) {
+      if (!Array.isArray(prediction.points) || prediction.points.length > 20_000) {
+        throw new InvalidInferenceResponse();
+      }
+      const polygon = prediction.points.map((point) => {
+        if (!record(point) || !finite(point.x) || !finite(point.y)) {
+          throw new InvalidInferenceResponse();
+        }
+        return { x: clamp(point.x / width), y: clamp(point.y / height) };
+      });
+      // A missing or empty mask can still be shown using its original box.
+      if (polygon.length >= 3) points = polygon;
+    }
     detections.push({
       id: `dog-${index}`, label: 'dog', confidence,
       x: left, y: top, width: right - left, height: bottom - top,
+      ...(points ? { points } : {}),
     });
   }
   return { image: { width, height }, detections };
