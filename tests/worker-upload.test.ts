@@ -63,6 +63,21 @@ test('upload rejects unsupported types, bad source, malformed bytes, oversize an
   for (const [request, status] of cases) assert.equal((await handleRequest(request, environment(), neverFetch)).status, status);
 });
 
+test('uploaded segmentation uses the segmentation model without touching asset storage', async () => {
+  const original = upload();
+  const request = new Request(`${original.url}?mode=segmentation`, original);
+  const response = await handleRequest(request, environment(), async (input, init) => {
+    assert.equal(new URL(String(input)).pathname, '/coco-dataset-vdnr1/37');
+    assert.equal(init?.body, jpeg.toString('base64'));
+    return Response.json(raw);
+  });
+  const result = await response.json() as DetectionResult;
+  assert.equal(response.status, 200);
+  assert.equal(result.inferenceMode, 'segmentation');
+  assert.equal(result.source, 'upload');
+  assert.equal(result.artworkId, null);
+});
+
 test('upload rate admission happens before the body is read and uses the collection IP budget', async () => {
   const deniedRequest = upload();
   const env = environment(false);
