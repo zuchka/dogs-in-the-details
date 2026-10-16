@@ -14,10 +14,10 @@ Checked on October 16, 2026 during the four-hour build.
 
 ## Reproducibility and automated checks
 
-A separate copy was downloaded from the public source link and extracted into a clean directory. On Node 24.15.0 and npm 11.12.1:
+A separate copy of the upload-enabled source (commit `b111022`) was downloaded from the public source link and extracted into a clean directory. Every archived file matched that commit. On Node 24.15.0 and npm 11.12.1:
 
 - `npm ci` succeeded, reporting no known vulnerabilities at the time.
-- All 16 tests passed.
+- All 30 tests passed.
 - `npm run build` passed TypeScript checking and generated production assets.
 - The archive included all eight images, eight saved results, and required source files.
 - The archive contained no `.dev.vars`, private `.env` file, or configured secret value.
@@ -34,6 +34,10 @@ The upload and image-URL extension was checked against real Roboflow inference t
 - The Rijksmuseum collection-page URL was rejected with “This link must point directly to a JPEG, PNG, or WebP image.” This importer accepts image resources, not arbitrary web pages.
 - All 30 automated tests passed, along with TypeScript, the production build, and a Wrangler deployment dry run. Added cases cover image headers, dimensions, byte limits, animated-image rejection at the API, shared admission before reading upload bodies, source validation, and new/legacy export events.
 - The credential audit passed across tracked files, all Git objects, and the source archive. No configured secret value, token pattern, forbidden secret file, private home path, or personal commit email was found.
+
+After deployment, the public site repeated both paths successfully. The Rijksmuseum upload returned one dog above 0.35 at approximately 74% confidence in 1.3 seconds; the Art Institute URL import returned two dogs in 0.4 seconds. Both JSON exports used `artworkId: null` and the correct `upload`/`url` source without the original filename or remote URL. The URL export emitted its source-based event and received HTTP 202 in Cloudflare logs. Returning to the collection restored the saved museum example. The upload view still had no horizontal overflow at 319 CSS pixels.
+
+The public GitHub repository is [zuchka/dogs-in-the-details](https://github.com/zuchka/dogs-in-the-details). Its focused commit history was preserved; secret files and the user-supplied test image were not published.
 
 The artwork pilot is documented separately in [evaluation.md](evaluation.md). It is qualitative and deliberately includes failures. No custom training, segmentation, or collection-wide benchmark was attempted.
 
