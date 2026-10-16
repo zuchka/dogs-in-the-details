@@ -1,6 +1,6 @@
 # Artwork sources and visual inspection
 
-The eight demo images come from the Art Institute of Chicago's public API and
+The 40 demo images come from the Art Institute of Chicago's public API and
 official IIIF image service. Each record was checked on October 16, 2026 for
 `is_public_domain: true`, `artwork_type_title: "Painting"`, and a nonempty image
 identifier before its image was retrieved. Titles, artist text, dates, and credit
@@ -23,6 +23,14 @@ displaying an artwork. The museum does not endorse this project.
 python3 scripts/fetch-artworks.py
 ```
 
+To find additional catalog candidates, run `python3 scripts/discover-artworks.py`.
+On October 16, 2026, its search returned 66 public-domain paintings with an image
+and either a dog/dogs subject tag or a dog-related title. The gallery keeps the
+original eight works and adds 32 candidates selected for varied settings,
+periods, styles, dog sizes, and image aspect ratios. The two original negative
+controls remain. We did not select additions based on whether the model found
+their dogs.
+
 Python 3's standard library is sufficient. The script makes sequential requests
 at least one second apart, uses an identifying User-Agent, requests the museum's
 recommended 843-pixel image width, and verifies JPEG dimensions. It refuses
@@ -34,7 +42,7 @@ The data is deliberately small and selected for demonstration. Model results
 must not be represented as a collection-wide accuracy study. No model outputs
 or bounding-box annotations are included in this asset manifest.
 
-## What was visibly present in the retrieved images
+## Original eight-image pilot: visual inspection
 
 These observations come from inspecting the actual local 843-pixel JPEGs. They
 are qualitative reference notes, not independently reviewed ground truth or
@@ -50,6 +58,28 @@ model predictions. Counts refer to dogs visible during this inspection.
 | [27992](https://www.artic.edu/artworks/27992) | A Sunday on La Grande Jatte — 1884 | Two foreground dogs: a dark dog left of center and a smaller brown dog near the lower right. A monkey is beside the right-hand woman. | Stylized dogs at different scales; distinguish the monkey. |
 | [20684](https://www.artic.edu/artworks/20684) | Paris Street; Rainy Day | No dog observed in the retrieved image. | Negative control with people and a busy street. |
 | [111436](https://www.artic.edu/artworks/111436) | The Basket of Apples | No dog observed in the retrieved image. | Negative control with fruit, cloth, and a bottle. |
+
+## Expanded gallery
+
+The additional 32 image files were visually checked for successful downloads and
+variety before inference. They include these contrasting examples:
+
+- [Landscape with Dog](https://www.artic.edu/artworks/120081), Thomas Doughty:
+  a large white dog in a landscape.
+- [Portrait of a Girl with a Dog](https://www.artic.edu/artworks/59907), attributed
+  to Alessandro Longhi: a lap dog in a grayscale reproduction.
+- [Woman with Puppies](https://www.artic.edu/artworks/202666), Kitagawa Utamaro:
+  small puppies near the bottom of a very tall, narrow painting.
+- [Winter Scene](https://www.artic.edu/artworks/93450), Francisco de Goya:
+  a small dark dog against snow.
+- [The Music Lesson](https://www.artic.edu/artworks/16398), Jacob Ochtervelt:
+  a dog resting on a chair in an interior.
+- [Notre Dame de Paris](https://www.artic.edu/artworks/81568), Jean François
+  Raffaëlli: a small dog in a busy, loosely painted urban scene.
+
+All 40 titles, dates, credits, source links, and image identifiers are in
+`public/artworks.json`. The expansion has no independently annotated dog counts;
+its model outputs are examples to inspect, not a new accuracy measurement.
 
 ## Honest comparison with catalog search
 

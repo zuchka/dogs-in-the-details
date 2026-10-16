@@ -4,7 +4,9 @@ Find and inspect dogs in public-domain paintings with **Roboflow's hosted RF-DET
 
 **[Try the demo](https://dogs.zuchka.dev)** · **[Source on GitHub](https://github.com/zuchka/dogs-in-the-details)**
 
-The useful output is a location: a box and a close-up you can inspect, share, or export. These paintings already have dog-related catalog tags. This project does not claim to discover missing metadata or replace a curator's judgment.
+The useful output is a location: a box and a close-up you can inspect, share, or export. Dog-related catalog titles and subject tags helped select the examples. This project does not claim to discover missing metadata or replace a curator's judgment.
+
+The gallery contains **40 public-domain paintings**. Search by title or artist, or choose **Browse all** to open the full grid. Each work has a genuine saved Roboflow result; **Find the dogs** runs fresh inference.
 
 ## Try your own painting
 
@@ -74,7 +76,7 @@ The HTTP endpoint is pinned to `coco/40`, the underlying version mapped from `rf
 
 Saved examples are actual hosted Roboflow responses generated during the build. Their model and timestamps are preserved, and the UI labels them **saved**. A live error stays an error; it does not silently become a saved result.
 
-The model was pretrained on photographs, not this painting collection. Small dogs, dark interiors, stylized forms, partial occlusion, other animals, and duplicate low-confidence boxes are useful failure cases. A zero-result response means the model found nothing above the chosen threshold; it does not prove there is no dog. The eight hand-selected paintings are a small qualitative check, not an accuracy benchmark.
+The model was pretrained on photographs, not this painting collection. Small dogs, dark interiors, stylized forms, partial occlusion, other animals, and duplicate low-confidence boxes are useful failure cases. A zero-result response means the model found nothing above the chosen threshold; it does not prove there is no dog. The 40 hand-selected paintings are an exploratory gallery, not an accuracy benchmark. The original eight-image pilot retains its separate qualitative evaluation.
 
 See [evaluation notes](docs/evaluation.md) and [artwork provenance](docs/artwork-notes.md). Public-domain status was checked for every bundled image using the [Art Institute of Chicago API](https://api.artic.edu/docs/). The museum does not endorse this project.
 
@@ -101,6 +103,7 @@ Use a dedicated, least-privilege inference key where your Roboflow plan supports
 | `worker/detections.ts` | Response validation and coordinate conversion |
 | `scripts/detect.mjs` | Minimal local-image reproduction |
 | `scripts/fetch-artworks.py` | Fetch public-domain Chicago images, sequentially |
+| `scripts/discover-artworks.py` | Search public-domain paintings by dog-related titles and subject tags |
 | `public/results` | Genuine saved inference results |
 
 ```sh
@@ -111,3 +114,5 @@ python3 scripts/check-secrets.py
 ```
 
 Regenerate Cloudflare binding types with `npx wrangler types` after changing configuration. Refresh the artwork collection with `python3 scripts/fetch-artworks.py`; the fetcher uses the museum's recommended image width, an identifying User-Agent, and at least one second between requests.
+
+Find more catalog candidates with `python3 scripts/discover-artworks.py`. Catalog matches are candidates for visual inspection, not model detections. To generate saved results for newly added paintings, run `node --env-file=.dev.vars scripts/generate-results.mjs --run-missing`; this makes one paid hosted inference request per missing captured response and reuses existing responses.

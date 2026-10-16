@@ -1,5 +1,10 @@
 # Pilot evaluation: Dogs in the Details
 
+This is the original eight-image pilot. The gallery has since expanded to 40
+paintings; the 32 additions have genuine saved hosted results but were not added
+to this manually compared pilot. See [artwork notes](artwork-notes.md) for the
+selection method. Do not generalize the pilot's findings to the expanded gallery.
+
 Eight Art Institute of Chicago paintings were inspected visually and processed
 once each through Roboflow's hosted `rfdetr-medium` model, pinned to `coco/40`.
 The existing response for artwork 886 was reused; seven additional requests were
