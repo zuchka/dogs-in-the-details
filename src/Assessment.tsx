@@ -14,6 +14,8 @@ export default function Assessment() {
 
   useEffect(() => {
     document.title = 'The assessment — Dogs in the Details';
+    // React mounts after the browser first looks for a fragment target.
+    document.getElementById(window.location.hash.slice(1))?.scrollIntoView({ behavior: 'instant' });
   }, []);
 
   return (
