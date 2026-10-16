@@ -35,10 +35,12 @@ Saved examples are genuine earlier responses supplied by the application. Their 
 The browser can send `POST /api/events` with exactly:
 
 ```json
-{"event":"live_inference_exported","sessionId":"d4df4dde-7193-4358-a5f2-7acfd07462ab","artworkId":886}
+{"event":"live_inference_exported","sessionId":"d4df4dde-7193-4358-a5f2-7acfd07462ab","source":"upload"}
 ```
 
-Send this only when a visitor exports a fresh, successful live result. Generate a random UUID with `crypto.randomUUID()` and keep it in `sessionStorage`; send no name, email, or other identifying fields. Telemetry is best-effort: a network failure or rejected event must not interrupt the download. The server validates the event name, UUID, catalog ID, and 1 KB body limit, then writes a structured log containing only those three fields. It never calls Roboflow for an event.
+The source is exactly `collection`, `upload`, or `url`. Older clients may send `artworkId` instead of `source`; that ID must exist in the demo catalog. Extra fields are rejected, including filenames and URLs.
+
+Send this only when a visitor exports a fresh, successful live result. Generate a random UUID with `crypto.randomUUID()` and keep it in `sessionStorage`; send no name, email, or other identifying fields. Telemetry is best-effort: a network failure or rejected event must not interrupt the download. The server validates the event name, UUID, source (or legacy catalog ID), and 1 KiB body limit, then writes a structured log containing only those three fields. It never calls Roboflow for an event.
 
 In Cloudflare Workers Logs, filter for `event = live_inference_exported` and count distinct `sessionId` values over the reporting period. This measures **anonymous sessions exporting live results**, a trial activation proxy. It is not proof of unique people or project adoption: sessions can reset and the public browser event can be forged. No third-party analytics service is required. Platform request logs have their own separate retention and metadata settings.
 

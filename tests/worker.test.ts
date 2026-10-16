@@ -126,6 +126,19 @@ test('a validated export event records only anonymous metric fields without infe
   assert.deepEqual(JSON.parse(log.mock.calls[0].arguments[0]), validEvent);
 });
 
+test('source-based export events log only the allowed source and anonymous event fields', async (t) => {
+  const log = t.mock.method(console, 'log', () => {});
+  const env = environment({ key: '' });
+  env.ASSETS.fetch = async () => { throw new Error('Source-only events need no catalog'); };
+  for (const source of ['collection', 'upload', 'url']) {
+    const event = { event: validEvent.event, sessionId: validEvent.sessionId, source };
+    const response = await handleRequest(eventRequest(event), env, neverFetch);
+    assert.equal(response.status, 202);
+    assert.deepEqual(JSON.parse(log.mock.calls.at(-1)!.arguments[0]), event);
+  }
+  assert.equal(log.mock.callCount(), 3);
+});
+
 test('unsupported events, extra fields, invalid UUIDs, unknown artworks, and oversized events are rejected', async (t) => {
   const log = t.mock.method(console, 'log', () => {});
   for (const [body, status] of [
@@ -133,6 +146,11 @@ test('unsupported events, extra fields, invalid UUIDs, unknown artworks, and ove
     [{ ...validEvent, sessionId: 'not-a-uuid' }, 400],
     [{ ...validEvent, apiKey: 'not-allowed' }, 400],
     [{ ...validEvent, artworkId: 999 }, 404],
+    [{ event: validEvent.event, sessionId: validEvent.sessionId, source: 'unknown' }, 400],
+    [{ event: validEvent.event, sessionId: validEvent.sessionId, url: 'https://private.example/image.jpg' }, 400],
+    [{ event: validEvent.event, sessionId: validEvent.sessionId, source: 'url', filename: 'private.jpg' }, 400],
+    [{ ...validEvent, source: 'collection' }, 400],
+    [{ ...validEvent, artworkId: null }, 400],
     [{ ...validEvent, event: 'x'.repeat(1025) }, 413],
   ] as const) {
     const response = await handleRequest(eventRequest(body), environment(), neverFetch);

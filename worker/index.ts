@@ -174,26 +174,33 @@ export async function handleRequest(request: Request, env: HandlerEnv, inferFetc
     let body: unknown;
     const bodyText = new TextDecoder().decode(await readBounded(request, 1024));
     try { body = JSON.parse(bodyText); }
-    catch { throw new HttpError(400, 'INVALID_REQUEST', 'Send a JSON object containing artworkId.'); }
-    if (!body || typeof body !== 'object' || Array.isArray(body)
-      || !('artworkId' in body) || typeof body.artworkId !== 'number'
-      || !Number.isSafeInteger(body.artworkId) || body.artworkId <= 0) {
-      throw new HttpError(400, 'INVALID_REQUEST', 'Send a positive integer artworkId.');
+    catch { throw new HttpError(400, 'INVALID_REQUEST', 'Send a valid JSON object.'); }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      throw new HttpError(400, 'INVALID_REQUEST', 'Send a valid JSON object.');
     }
-    const artworkId = body.artworkId;
     if (url.pathname === '/api/events') {
       if (Object.keys(body).length !== 3 || !('event' in body) || body.event !== 'live_inference_exported'
         || !('sessionId' in body) || typeof body.sessionId !== 'string'
         || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.sessionId)) {
-        throw new HttpError(400, 'INVALID_EVENT', 'Send a supported event, UUID sessionId, and artworkId.');
+        throw new HttpError(400, 'INVALID_EVENT', 'Send a supported event, UUID sessionId, and image source.');
       }
+      let subject: { artworkId: number } | { source: ImageSourceKind };
+      if ('artworkId' in body && typeof body.artworkId === 'number' && Number.isSafeInteger(body.artworkId) && body.artworkId > 0) {
+        subject = { artworkId: body.artworkId };
+      } else if ('source' in body && (body.source === 'collection' || body.source === 'upload' || body.source === 'url')) {
+        subject = { source: body.source };
+      } else throw new HttpError(400, 'INVALID_EVENT', 'Send a supported image source or collection artworkId.');
       const admitted = await env.INFERENCE_RATE_LIMITER.limit({ key: `events:${request.headers.get('CF-Connecting-IP') ?? 'local-development'}` });
       if (!admitted.success) throw new HttpError(429, 'RATE_LIMITED', 'Please wait before sending another event.');
-      await assertKnownArtwork(url, env, artworkId);
-      console.log(JSON.stringify({ event: 'live_inference_exported', sessionId: body.sessionId, artworkId }));
+      if ('artworkId' in subject) await assertKnownArtwork(url, env, subject.artworkId);
+      console.log(JSON.stringify({ event: 'live_inference_exported', sessionId: body.sessionId, ...subject }));
       return json({ accepted: true }, 202);
     }
-    if (Object.keys(body).length !== 1) throw new HttpError(400, 'INVALID_REQUEST', 'Send only artworkId.');
+    if (Object.keys(body).length !== 1 || !('artworkId' in body) || typeof body.artworkId !== 'number'
+      || !Number.isSafeInteger(body.artworkId) || body.artworkId <= 0) {
+      throw new HttpError(400, 'INVALID_REQUEST', 'Send only a positive integer artworkId.');
+    }
+    const artworkId = body.artworkId;
     const apiKey = await admitInference(request, env);
     const image = await getArtworkImage(url, env, artworkId);
     return json(await runInference(image, apiKey, artworkId, 'collection', inferFetch));
