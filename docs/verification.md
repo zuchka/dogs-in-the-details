@@ -63,6 +63,8 @@ The artwork pilot is documented separately in [evaluation.md](evaluation.md). It
 
 ## Recording and submission
 
-The `/assessment` page links the live demo and source, renders the 176-word launch note from its source document, and reserves a clearly labeled space for the recording. Chrome checks covered its desktop layout, section links, and a 390 CSS-pixel mobile view with no horizontal overflow. The production build and all 35 existing tests passed. Video playback remains unverified until the actual MP4 is supplied.
+The `/assessment` page links the live demo and source, renders the 176-word launch note from its source document, and embeds the finished recording. Chrome checks covered its desktop layout, section links, and a 390 CSS-pixel mobile view with no horizontal overflow. The production build and all 35 existing tests passed before the recording was added; the video URL change also passed TypeScript and the production build.
 
-The walkthrough script and launch note are prepared. A human-narrated recording and the final submission email remain manual deliverables. Do not describe those as completed until the video is recorded and the email is actually sent.
+The original 219,830,000-byte H.264/AAC MP4 is hosted in Cloudflare R2 at `https://dogs-media.zuchka.dev/walkthrough-2026-10-16.mp4`, outside Git and Worker static assets. HTTPS returned `video/mp4`, the correct content length, and `206 Partial Content` for a byte-range request. Chrome loaded the embedded recording without autoplay, played it, and resumed playback after seeking past 3:30. The file has fast-start metadata and retains its original speed and quality.
+
+The recording lasts 6:08 (368.412 seconds), exceeding the assessment's requested under-five-minute limit. The original duration was retained at the author's request. The final submission email has not been sent.
