@@ -33,7 +33,7 @@ function DogCrop({ artwork, detection }: { artwork: Artwork; detection: Detectio
   const right = Math.min(1, detection.x + detection.width * (1 + pad));
   const bottom = Math.min(1, detection.y + detection.height * (1 + pad));
   return (
-    <svg className="dog-crop" viewBox={`${left * artwork.width} ${top * artwork.height} ${(right - left) * artwork.width} ${(bottom - top) * artwork.height}`} role="img" aria-label={`Detail detected as a dog in ${artwork.title}`} preserveAspectRatio="xMidYMid slice">
+    <svg className="dog-crop" viewBox={`${left * artwork.width} ${top * artwork.height} ${(right - left) * artwork.width} ${(bottom - top) * artwork.height}`} role="img" aria-label={`Detail detected as a dog in ${artwork.title}`} preserveAspectRatio="xMidYMid meet">
       <image href={artwork.image} width={artwork.width} height={artwork.height} />
     </svg>
   );
