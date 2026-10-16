@@ -4,7 +4,9 @@ import {
   Check, ChevronRight, Code2, Copy, Eye, EyeOff, Info, LoaderCircle,
   Scan, ScanLine, Share2, X,
 } from 'lucide-react';
-import type { Artwork, Detection, DetectionResult } from './types';
+import type { Artwork, DisplayImage, Detection, DetectionResult, ImageSourceKind } from './types';
+import ImageImport from './ImageImport';
+import type { CustomImage } from './image-input';
 
 const DEFAULT_THRESHOLD = 0.35;
 
@@ -12,7 +14,7 @@ function displayDate(iso: string) {
   return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(iso));
 }
 
-function recordLiveExport(artworkId: number) {
+function recordLiveExport(artworkId: number | null, source: ImageSourceKind) {
   try {
     const key = 'dogs-in-the-details-session';
     const sessionId = sessionStorage.getItem(key) ?? crypto.randomUUID();
@@ -20,13 +22,13 @@ function recordLiveExport(artworkId: number) {
     void fetch('/api/events', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event: 'live_inference_exported', sessionId, artworkId }),
+      body: JSON.stringify({ event: 'live_inference_exported', sessionId, artworkId, source }),
       keepalive: true,
     }).catch(() => { /* Analytics must not interrupt the download. */ });
   } catch { /* Export remains available when session storage is restricted. */ }
 }
 
-function DogCrop({ artwork, detection }: { artwork: Artwork; detection: Detection }) {
+function DogCrop({ artwork, detection }: { artwork: DisplayImage; detection: Detection }) {
   const pad = 0.18;
   const left = Math.max(0, detection.x - detection.width * pad);
   const top = Math.max(0, detection.y - detection.height * pad);
@@ -42,6 +44,7 @@ function DogCrop({ artwork, detection }: { artwork: Artwork; detection: Detectio
 function App() {
   const [artworks, setArtworks] = useState<Artwork[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [customImage, setCustomImage] = useState<CustomImage | null>(null);
   const [manifestError, setManifestError] = useState('');
   const [result, setResult] = useState<DetectionResult | null>(null);
   const [threshold, setThreshold] = useState(DEFAULT_THRESHOLD);
@@ -57,7 +60,8 @@ function App() {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const detectAbort = useRef<AbortController | null>(null);
 
-  const artwork = artworks.find((item) => item.id === selectedId);
+  const collectionArtwork = artworks.find((item) => item.id === selectedId);
+  const artwork = customImage ? { ...customImage, id: null, title: 'Your image', artist: '', date: '', credit: '', sourceUrl: '' } : collectionArtwork;
   const artworkIndex = artworks.findIndex((item) => item.id === selectedId);
   const dogs = result?.detections.filter((dog) => dog.confidence >= threshold) ?? [];
 
@@ -79,7 +83,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!selectedId) return;
+    if (!selectedId && !customImage) return;
     const version = ++requestVersion.current;
     const controller = new AbortController();
     detectAbort.current?.abort();
@@ -90,8 +94,10 @@ function App() {
     setImageLoaded(false);
     setImageError(false);
     const url = new URL(window.location.href);
-    url.searchParams.set('artwork', String(selectedId));
+    if (customImage) url.searchParams.delete('artwork');
+    else url.searchParams.set('artwork', String(selectedId));
     window.history.replaceState({}, '', url);
+    if (customImage) return () => controller.abort();
     fetch(`/results/${selectedId}.json`, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) return null;
@@ -104,7 +110,9 @@ function App() {
       })
       .catch(() => { /* Saved examples are optional. Live inference remains available. */ });
     return () => controller.abort();
-  }, [selectedId]);
+  }, [selectedId, customImage]);
+
+  useEffect(() => () => { if (customImage) URL.revokeObjectURL(customImage.image); }, [customImage]);
 
   useEffect(() => {
     if (showHow) dialogRef.current?.showModal();
@@ -127,9 +135,11 @@ function App() {
     setActiveDetection(null);
     const timeout = window.setTimeout(() => controller.abort(), 90000);
     try {
-      const response = await fetch('/api/detect', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ artworkId: artwork.id }), signal: controller.signal,
+      const response = await fetch(customImage ? '/api/detect-upload' : '/api/detect', {
+        method: 'POST',
+        headers: customImage ? { 'Content-Type': 'image/jpeg', 'X-Image-Source': customImage.source } : { 'Content-Type': 'application/json' },
+        body: customImage ? customImage.blob : JSON.stringify({ artworkId: artwork.id }),
+        signal: controller.signal,
       });
       const payload = await response.json() as DetectionResult & { error?: { code: string; message: string } };
       if (!response.ok) throw new Error(response.status === 429 ? 'A few too many requests at once. Please wait a minute before trying again.' : payload.error?.message ?? 'Detection could not finish. Please try again in a moment.');
@@ -160,18 +170,31 @@ function App() {
 
   function downloadResult() {
     if (!result || !artwork) return;
-    const blob = new Blob([JSON.stringify({ ...result, artwork: { title: artwork.title, artist: artwork.artist, sourceUrl: artwork.sourceUrl }, displayThreshold: threshold }, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify({ ...result, artwork: customImage ? { title: 'Your image', source: customImage.source } : { title: artwork.title, artist: artwork.artist, sourceUrl: artwork.sourceUrl }, displayThreshold: threshold }, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `dogs-in-the-details-${artwork.id}.json`;
+    link.download = `dogs-in-the-details-${customImage ? customImage.source : artwork.id}.json`;
     link.click();
     URL.revokeObjectURL(url);
-    if (result.mode === 'live') recordLiveExport(artwork.id);
+    if (result.mode === 'live') recordLiveExport(artwork.id, customImage?.source ?? 'collection');
+  }
+
+  function chooseArtwork(id: number) {
+    detectAbort.current?.abort();
+    setResult(null);
+    setCustomImage(null);
+    setSelectedId(id);
+  }
+
+  function chooseCustomImage(image: CustomImage) {
+    detectAbort.current?.abort();
+    setResult(null);
+    setCustomImage(image);
   }
 
   function moveArtwork(direction: number) {
-    setSelectedId(artworks[(artworkIndex + direction + artworks.length) % artworks.length].id);
+    chooseArtwork(artworks[(artworkIndex + direction + artworks.length) % artworks.length].id);
   }
 
   const exampleCode = [
@@ -208,10 +231,12 @@ function App() {
           <section id="collection" className="collection" aria-label="Interactive art collection">
             <div className="section-rule">
               <span><span className="section-number">01</span> THE LOOKING ROOM</span>
-              <span className="collection-source">ART INSTITUTE OF CHICAGO <span className="separator">/</span> PUBLIC DOMAIN</span>
+              <span className="collection-source">{customImage ? <>YOUR IMAGE <span className="separator">/</span> {customImage.source === 'upload' ? 'FROM YOUR DEVICE' : 'IMPORTED FROM A URL'}</> : <>ART INSTITUTE OF CHICAGO <span className="separator">/</span> PUBLIC DOMAIN</>}</span>
             </div>
 
-            {manifestError ? (
+            <ImageImport active={!!customImage} onChoose={chooseCustomImage} onBack={() => { setResult(null); setCustomImage(null); }} />
+
+            {manifestError && !artwork ? (
               <div className="collection-error"><Info size={24} /><h2>The gallery is taking a moment.</h2><p>{manifestError}</p><button className="primary-button" onClick={() => window.location.reload()}>Try again <ArrowRight size={17} /></button></div>
             ) : !artwork ? (
               <div className="collection-loading"><LoaderCircle className="spin" size={24} /><span>Opening the collection…</span></div>
@@ -220,12 +245,12 @@ function App() {
                 <div className="workbench">
                   <div className="artwork-column">
                     <div className={`painting-mat ${running ? 'is-scanning' : ''}`}>
-                      <div className="mat-topline"><span>PLATE {String(artworkIndex + 1).padStart(2, '0')}</span><button className="icon-button" onClick={shareArtwork} aria-label="Copy link to this artwork" title="Copy artwork link">{copied === 'share' ? <Check size={16} /> : <Share2 size={15} />}</button></div>
+                      <div className="mat-topline"><span>{customImage ? 'YOUR IMAGE' : `PLATE ${String(artworkIndex + 1).padStart(2, '0')}`}</span>{!customImage && <button className="icon-button" onClick={shareArtwork} aria-label="Copy link to this artwork" title="Copy artwork link">{copied === 'share' ? <Check size={16} /> : <Share2 size={15} />}</button>}</div>
                       <div className="painting-space">
                         {!imageLoaded && !imageError && <span className="painting-loading"><LoaderCircle className="spin" size={22} /></span>}
                         {imageError ? <p className="painting-image-error">This painting could not be loaded. Choose another from the collection.</p> : (
                           <div className={`painting-stage ${imageLoaded ? 'is-loaded' : ''}`} style={{ '--art-ratio': artwork.width / artwork.height } as CSSProperties}>
-                            <img key={artwork.id} src={artwork.image} alt={`${artwork.title}, ${artwork.date}, by ${artwork.artist}`} width={artwork.width} height={artwork.height} onLoad={() => setImageLoaded(true)} onError={() => setImageError(true)} />
+                            <img key={artwork.image} src={artwork.image} alt={customImage ? 'Your image, ready for dog detection' : `${artwork.title}, ${artwork.date}, by ${artwork.artist}`} width={artwork.width} height={artwork.height} onLoad={() => setImageLoaded(true)} onError={() => setImageError(true)} />
                             {showBoxes && !running && dogs.map((dog, index) => (
                               <button key={dog.id} className={`detection-box ${activeDetection === dog.id ? 'is-active' : ''}`} style={{ left: `${dog.x * 100}%`, top: `${dog.y * 100}%`, width: `${dog.width * 100}%`, height: `${dog.height * 100}%` }} onClick={() => setActiveDetection(dog.id)} aria-label={`Dog ${index + 1}, ${Math.round(dog.confidence * 100)} percent confidence`}><span>{String(index + 1).padStart(2, '0')}</span></button>
                             ))}
@@ -236,8 +261,8 @@ function App() {
                       <div className="mat-bottomline"><span>{running ? 'LOOKING FOR CANINE COMPANIONS…' : result ? `${dogs.length} ${dogs.length === 1 ? 'DETAIL' : 'DETAILS'} ABOVE ${Math.round(threshold * 100)}% CONFIDENCE` : 'EVERY PAINTING HAS MORE TO SEE'}</span><span className="mat-cross" aria-hidden="true">+</span></div>
                     </div>
                     <div className="painting-caption">
-                      <div><h2>{artwork.title}</h2><p>{artwork.artist}<span> · </span>{artwork.date}</p><p className="painting-credit">{artwork.credit}</p></div>
-                      <div className="artwork-paging"><button className="icon-button" onClick={() => moveArtwork(-1)} aria-label="Previous artwork"><ArrowLeft size={17} /></button><span>{String(artworkIndex + 1).padStart(2, '0')}<span className="page-count"> / {String(artworks.length).padStart(2, '0')}</span></span><button className="icon-button" onClick={() => moveArtwork(1)} aria-label="Next artwork"><ArrowRight size={17} /></button></div>
+                      <div><h2>{artwork.title}</h2>{customImage ? <p>{customImage.source === 'upload' ? 'Uploaded from your device' : 'Imported from an image URL'}<span> · </span>{artwork.width} × {artwork.height} pixels</p> : <><p>{artwork.artist}<span> · </span>{artwork.date}</p><p className="painting-credit">{artwork.credit}</p></>}</div>
+                      {!customImage && <div className="artwork-paging"><button className="icon-button" onClick={() => moveArtwork(-1)} aria-label="Previous artwork"><ArrowLeft size={17} /></button><span>{String(artworkIndex + 1).padStart(2, '0')}<span className="page-count"> / {String(artworks.length).padStart(2, '0')}</span></span><button className="icon-button" onClick={() => moveArtwork(1)} aria-label="Next artwork"><ArrowRight size={17} /></button></div>}
                     </div>
                   </div>
 
@@ -256,14 +281,14 @@ function App() {
                     {result && !running && <div className="result-controls"><div className="confidence-label"><label htmlFor="confidence">Minimum confidence</label><output htmlFor="confidence">{Math.round(threshold * 100)}%</output></div><input id="confidence" type="range" min="10" max="95" step="5" value={Math.round(threshold * 100)} onChange={(event) => setThreshold(Number(event.target.value) / 100)} style={{ '--range-progress': `${((threshold * 100 - 10) / 85) * 100}%` } as CSSProperties} /><div className="result-actions"><button onClick={() => setShowBoxes(!showBoxes)} aria-pressed={showBoxes}>{showBoxes ? <Eye size={14} /> : <EyeOff size={14} />}{showBoxes ? 'Hide boxes' : 'Show boxes'}</button><button onClick={downloadResult}><ArrowDownToLine size={14} /> JSON</button></div></div>}
 
                     {error && <div className="inference-error" role="alert"><Info size={16} /><p>{error}{result && <span> The {result.mode} result above is from the previous successful run.</span>}</p></div>}
-                    <div className="detect-action"><button className="primary-button" disabled={running || imageError} onClick={findDogs}>{running ? <><LoaderCircle className="spin" size={18} /> Looking closer…</> : <><ScanLine size={18} />{result ? 'Find the dogs again' : 'Find the dogs'}<ArrowRight size={17} /></>}</button><p>Live object detection, powered by <a href="https://roboflow.com" target="_blank" rel="noreferrer">Roboflow <ArrowUpRight size={10} /></a></p></div>
+                    <div className="detect-action">{customImage && <p className="upload-privacy">Find the dogs sends this prepared image to Roboflow. This app does not save your upload or add it to the gallery.</p>}<button className="primary-button" disabled={running || imageError} onClick={findDogs}>{running ? <><LoaderCircle className="spin" size={18} /> Looking closer…</> : <><ScanLine size={18} />{result ? 'Find the dogs again' : 'Find the dogs'}<ArrowRight size={17} /></>}</button><p>Live object detection, powered by <a href="https://roboflow.com" target="_blank" rel="noreferrer">Roboflow <ArrowUpRight size={10} /></a></p></div>
                   </aside>
                 </div>
 
                 <div className="collection-strip-heading"><span>ANOTHER PAINTING, ANOTHER POSSIBILITY</span><span>{artworks.length} WORKS TO EXPLORE</span></div>
-                <div className="artwork-strip" aria-label="Choose an artwork">{artworks.map((item, index) => <button key={item.id} onClick={() => setSelectedId(item.id)} className={`artwork-card ${selectedId === item.id ? 'is-selected' : ''}`} aria-pressed={selectedId === item.id}><span className="thumbnail-wrap"><img src={item.image} alt="" loading="lazy" /><span className="thumbnail-number">{String(index + 1).padStart(2, '0')}</span>{selectedId === item.id && <span className="selected-label">ON VIEW <ArrowUpRight size={12} /></span>}</span><span className="artwork-card-title">{item.title}</span><span className="artwork-card-artist">{item.artist}</span></button>)}</div>
+                <div className="artwork-strip" aria-label="Choose an artwork">{artworks.map((item, index) => <button key={item.id} onClick={() => chooseArtwork(item.id)} className={`artwork-card ${!customImage && selectedId === item.id ? 'is-selected' : ''}`} aria-pressed={!customImage && selectedId === item.id}><span className="thumbnail-wrap"><img src={item.image} alt="" loading="lazy" /><span className="thumbnail-number">{String(index + 1).padStart(2, '0')}</span>{!customImage && selectedId === item.id && <span className="selected-label">ON VIEW <ArrowUpRight size={12} /></span>}</span><span className="artwork-card-title">{item.title}</span><span className="artwork-card-artist">{item.artist}</span></button>)}</div>
 
-                <div className="artwork-credit"><span><span className="credit-dot" /> Public-domain art, open to everyone.</span><a href={artwork.sourceUrl} target="_blank" rel="noreferrer">View this work at the Art Institute of Chicago <ArrowUpRight size={13} /></a></div>
+                <div className="artwork-credit">{customImage ? <><span><span className="credit-dot" /> Your image stays outside the public collection.</span><button onClick={() => { setResult(null); setCustomImage(null); }}>Back to the museum collection <ArrowRight size={13} /></button></> : <><span><span className="credit-dot" /> Public-domain art, open to everyone.</span><a href={artwork.sourceUrl} target="_blank" rel="noreferrer">View this work at the Art Institute of Chicago <ArrowUpRight size={13} /></a></>}</div>
               </>
             )}
           </section>
@@ -275,7 +300,7 @@ function App() {
       </div>
 
       <dialog className="how-dialog" ref={dialogRef} onCancel={() => setShowHow(false)} onClick={(event) => { if (event.target === dialogRef.current) setShowHow(false); }}>
-        <div className="dialog-content"><div className="dialog-top"><span className="eyebrow">BEHIND THE DETAILS</span><button className="icon-button" onClick={() => setShowHow(false)} aria-label="Close explanation"><X size={20} /></button></div><h2>Art. An API.<br /><em>A fresh pair of eyes.</em></h2><p className="dialog-intro">This is object detection: finding a dog and drawing a box around it. The model predicts locations and confidence scores, not pixel-perfect segmentation or an art-historical interpretation.</p><ol className="how-steps"><li><span>01</span><div><h3>Start with an open collection</h3><p>Public-domain paintings and their metadata come from the Art Institute of Chicago. Each painting links back to its original museum record.</p></div></li><li><span>02</span><div><h3>Let Roboflow run the model</h3><p>Our server sends the selected painting to Roboflow’s hosted RF-DETR object detector. The API key stays on the server. We keep the predictions labeled “dog.”</p></div></li><li><span>03</span><div><h3>Make the predictions visible</h3><p>Boxes locate each candidate. Crops let you inspect it. The confidence slider filters the returned predictions locally, without another model request.</p></div></li></ol><div className="developer-note"><Code2 size={19} /><div><h3>Try the demo API</h3><p>The same endpoint powers this page. Choose an artwork ID from the collection and inspect the JSON response.</p></div></div><div className="code-block"><button aria-label="Copy API example" onClick={async () => { try { await navigator.clipboard.writeText(exampleCode); setCopied('code'); } catch { /* The code remains selectable. */ } }}>{copied === 'code' ? <Check size={15} /> : <Copy size={15} />}</button><pre>{exampleCode}</pre></div><p className="model-caveat"><Info size={15} /><span>Confidence is a model score, not a promise of correctness. RF-DETR was trained on photographs; paintings can produce missed dogs and false positives. Saved examples are labeled with their original run date.</span></p><a className="text-link" href="https://docs.roboflow.com/models/supported-models/rf-detr" target="_blank" rel="noreferrer">Explore RF-DETR on Roboflow <ChevronRight size={15} /></a><a className="source-download" href="/dogs-in-the-details-source.zip" download><ArrowDownToLine size={15} /> Download the project source</a></div>
+        <div className="dialog-content"><div className="dialog-top"><span className="eyebrow">BEHIND THE DETAILS</span><button className="icon-button" onClick={() => setShowHow(false)} aria-label="Close explanation"><X size={20} /></button></div><h2>Art. An API.<br /><em>A fresh pair of eyes.</em></h2><p className="dialog-intro">This is object detection: finding a dog and drawing a box around it. The model predicts locations and confidence scores, not pixel-perfect segmentation or an art-historical interpretation.</p><ol className="how-steps"><li><span>01</span><div><h3>Start with an open collection</h3><p>Public-domain paintings and their metadata come from the Art Institute of Chicago. You can also upload your own image or import one from a public image URL. Imports are resized and stripped of embedded metadata in your browser.</p></div></li><li><span>02</span><div><h3>Let Roboflow run the model</h3><p>Our server sends the selected painting to Roboflow’s hosted RF-DETR object detector. The API key stays on the server. We keep the predictions labeled “dog.”</p></div></li><li><span>03</span><div><h3>Make the predictions visible</h3><p>Boxes locate each candidate. Crops let you inspect it. The confidence slider filters the returned predictions locally, without another model request.</p></div></li></ol><div className="developer-note"><Code2 size={19} /><div><h3>Try the demo API</h3><p>This endpoint powers the museum collection. Custom images use /api/detect-upload with prepared image bytes. The source includes both flows, setup instructions, and tests.</p></div></div><div className="code-block"><button aria-label="Copy API example" onClick={async () => { try { await navigator.clipboard.writeText(exampleCode); setCopied('code'); } catch { /* The code remains selectable. */ } }}>{copied === 'code' ? <Check size={15} /> : <Copy size={15} />}</button><pre>{exampleCode}</pre></div><p className="model-caveat"><Info size={15} /><span>Confidence is a model score, not a promise of correctness. RF-DETR was trained on photographs; paintings can produce missed dogs and false positives. Saved examples are labeled with their original run date.</span></p><a className="text-link" href="https://docs.roboflow.com/models/supported-models/rf-detr" target="_blank" rel="noreferrer">Explore RF-DETR on Roboflow <ChevronRight size={15} /></a><a className="source-download" href="https://github.com/zuchka/dogs-in-the-details" target="_blank" rel="noreferrer"><Code2 size={15} /> View the project on GitHub <ArrowUpRight size={12} /></a><a className="source-download" href="/dogs-in-the-details-source.zip" download><ArrowDownToLine size={15} /> Download the project source</a></div>
       </dialog>
     </>
   );
