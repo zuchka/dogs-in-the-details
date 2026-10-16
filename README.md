@@ -6,7 +6,7 @@ Find and inspect dogs in public-domain paintings with **Roboflow's hosted RF-DET
 
 The useful output is a location: a box or an approximate dog outline, plus a close-up you can inspect, share, or export. Dog-related catalog titles and subject tags helped select the examples. This project does not claim to discover missing metadata or replace a curator's judgment.
 
-The gallery contains **40 public-domain paintings**. Search by title or artist, or choose **Browse all** to open the full grid. Each work has a genuine saved Roboflow result; **Find the dogs** runs fresh inference.
+The gallery contains **40 public-domain paintings**. Search by title or artist, or choose **Browse all** to open the full grid. Each work has genuine saved Roboflow results for both modes; **Find the dogs** runs fresh inference.
 
 Choose **Boxes** for the original detector or **Outlines** for instance segmentation. These select different pretrained RF-DETR checkpoints, so their dogs and confidence scores can differ. Switching can reuse a saved or previously fetched result for that image and mode; **Find the dogs** always requests a fresh result. Boxes remains the default and the fallback if segmentation is unavailable.
 
@@ -127,3 +127,5 @@ python3 scripts/check-secrets.py
 Regenerate Cloudflare binding types with `npx wrangler types` after changing configuration. Refresh the artwork collection with `python3 scripts/fetch-artworks.py`; the fetcher uses the museum's recommended image width, an identifying User-Agent, and at least one second between requests.
 
 Find more catalog candidates with `python3 scripts/discover-artworks.py`. Catalog matches are candidates for visual inspection, not model detections. To generate saved results for newly added paintings, run `node --env-file=.dev.vars scripts/generate-results.mjs --run-missing`; this makes one paid hosted inference request per missing captured response and reuses existing responses.
+
+Generate the separate outline results with `node --env-file=.dev.vars scripts/generate-results.mjs --mode segmentation --run-missing`. Original box fixtures remain in `public/results`; outline fixtures go to `public/results-segmentation`.

@@ -16,6 +16,8 @@ The service returned candidates down to 10% confidence. The table describes the 
 
 The masks followed the main bodies well enough to make the outline interaction useful. Fine boundaries, thin features, and occluded regions should be inspected rather than treated as exact. Small dogs can fall below a chosen confidence threshold, while other animals can pass it.
 
+After this spot-check, we captured and normalized segmentation responses for all 40 bundled paintings, separately from their original box-detector results. All 40 files record the selected checkpoint and saved provenance. Capturing the full gallery is not a visual accuracy review of all 40 paintings; the qualitative observations above cover only the three inspected examples.
+
 ## Reproduction
 
 Use the committed Chicago images with your own Roboflow key in the ignored `.dev.vars` file:
