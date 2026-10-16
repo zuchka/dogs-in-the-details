@@ -2,13 +2,29 @@
 
 Find and inspect dogs in public-domain paintings with **Roboflow's hosted RF-DETR Medium**. Built for developers working on museum, library, and digital-collection interfaces.
 
-**Demo:** https://dogs.zuchka.dev
+**[Try the demo](https://dogs.zuchka.dev)** · **[Source on GitHub](https://github.com/zuchka/dogs-in-the-details)**
 
 The useful output is a location: a box and a close-up you can inspect, share, or export. These paintings already have dog-related catalog tags. This project does not claim to discover missing metadata or replace a curator's judgment.
+
+## Try your own painting
+
+Choose **Upload** or **Image URL** in the demo, preview your image, then click **Find the dogs**. The result uses the same boxes, detail crops, confidence slider, and JSON export as the museum examples.
+
+- JPEG, PNG, and WebP files up to 8 MiB are supported. Original images must be under 40 megapixels and 16,384 pixels on either side.
+- The browser applies image orientation, resizes the longest edge to at most 2,048 pixels, and creates a JPEG without the original metadata. This exact image is both displayed and sent for inference.
+- Image URLs must be direct public HTTPS links. The image host must allow browser downloads through CORS, and redirects are rejected. If a host blocks imports, download the image and use Upload.
+- Clicking **Find the dogs** sends the prepared image through our server to Roboflow. This app does not store visitor images in its gallery. They last for the current page session; custom-image links cannot be shared as saved results. Roboflow processes the image under its service policies.
+
+Only submit images you have permission to process. No account is required for the public demo.
 
 ## Run a prediction in one command
 
 Requirements: Node.js **24 or later**, a Roboflow account with serverless inference access, and a private API key from [Roboflow API settings](https://app.roboflow.com/settings/api). Hosted inference uses your Roboflow credits.
+
+```sh
+git clone https://github.com/zuchka/dogs-in-the-details.git
+cd dogs-in-the-details
+```
 
 Copy `.env.example` to `.dev.vars`, then edit that file locally to set your key. Do not paste a key into browser code, a public issue, or a recorded terminal.
 
@@ -36,8 +52,8 @@ For UI development, run `npm run dev:api` in one terminal and `npm run dev` in a
 
 The model is the COCO-pretrained **RF-DETR Medium object detector**, executed on **Roboflow Serverless**, a hosted Roboflow product. This is not a local model demo. No custom training was performed.
 
-1. The browser selects a painting and posts its numeric ID to `/api/detect`.
-2. A Cloudflare Worker reads that approved image from its static assets and sends the image bytes to Roboflow. The key stays on the server.
+1. For a collection painting, the browser posts its numeric ID to `/api/detect`. For a visitor image, it posts the prepared image bytes to `/api/detect-upload`.
+2. A Cloudflare Worker validates the request, enforces the shared rate limit, and sends the image bytes to Roboflow. The key stays on the server. Image URLs are imported by the browser; our server never fetches a visitor-supplied URL.
 3. Roboflow predicts classes, confidence scores, and center-based pixel boxes.
 4. The Worker keeps `dog` predictions and converts their boxes into fractions of the original image, measured from its top-left corner.
 5. React draws those boxes and crops the same image. The slider filters the returned predictions locally; it does not run the model again.
@@ -46,7 +62,7 @@ This uses **object detection**, not segmentation. A crop is a rectangular view o
 
 ```mermaid
 flowchart LR
-  A[Painting selected in React] --> B[Cloudflare Worker]
+  A[Collection painting or prepared visitor image] --> B[Cloudflare Worker]
   B --> C[Roboflow Serverless RF-DETR]
   C --> D[Dog boxes and scores]
   D --> E[Overlays, details, JSON export]
@@ -71,7 +87,7 @@ The app needs no database or GPU on Cloudflare. Roboflow runs the model remotely
 3. Run `npx wrangler secret put ROBOFLOW_API_KEY` and enter your key at the prompt.
 4. Run `npm run deploy`.
 
-The public demo limits live inference to six requests per IP per minute in each Cloudflare location. This is a usage guard, not a global spending cap. The server accepts only bundled artwork IDs. No visitor image uploads or authentication are implemented.
+The public demo shares a limit of six live inference requests per IP per minute across collection and visitor images in each Cloudflare location. This is a usage guard, not a global spending cap. Uploads are bounded and independently checked on the server. There is no database, visitor gallery, or authentication.
 
 Use a dedicated, least-privilege inference key where your Roboflow plan supports scoped keys. Never commit `.dev.vars`. The supplied example contains no credentials.
 
@@ -80,6 +96,7 @@ Use a dedicated, least-privilege inference key where your Roboflow plan supports
 | Path | Responsibility |
 | --- | --- |
 | `src/App.tsx`, `src/styles.css` | Collection UI, overlays, and crops |
+| `src/ImageImport.tsx`, `src/image-input.ts` | Upload/URL preview, size checks, orientation, and resizing |
 | `worker/index.ts` | Input validation, hosted call, rate limit, errors |
 | `worker/detections.ts` | Response validation and coordinate conversion |
 | `scripts/detect.mjs` | Minimal local-image reproduction |
@@ -90,6 +107,7 @@ Use a dedicated, least-privilege inference key where your Roboflow plan supports
 npm test
 npm run build
 npx wrangler deploy --dry-run
+python3 scripts/check-secrets.py
 ```
 
 Regenerate Cloudflare binding types with `npx wrangler types` after changing configuration. Refresh the artwork collection with `python3 scripts/fetch-artworks.py`; the fetcher uses the museum's recommended image width, an identifying User-Agent, and at least one second between requests.
