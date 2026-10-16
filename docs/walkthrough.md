@@ -1,74 +1,86 @@
-# Developer walkthrough — target 4:30
+# Developer walkthrough — target 4:35, hard stop 4:50
 
-Record one take with the browser and editor at a readable zoom. Close secret files and hide terminal history that could contain credentials. Use your own voice; this is a teaching demo, not a polished commercial.
+Read only the quoted narration. Screen directions and commands are not spoken. Rehearse once with a timer, allowing time for clicks and requests. The assessment requires a video shorter than five minutes.
 
 ## Before recording
 
-- Open https://dogs.zuchka.dev on La Grande Jatte.
-- Keep `public/images/886.jpg` ready in the file picker for the upload demonstration.
-- Open `scripts/detect.mjs`, `worker/detections.ts`, and `README.md` in the editor.
-- Prepare a terminal in the project with Node 24 and `.dev.vars` configured. Do not open the secret file on screen.
-- Make one rehearsal live call, then wait a minute so the public demo's request limit will not interrupt the recording.
-- Start with the saved example visible and clearly explain its label.
+- Open [La Grande Jatte](https://dogs.zuchka.dev/?artwork=27992#collection) at a readable desktop size, at 35% confidence with the saved result visible.
+- Keep the supplied Rijksmuseum still life, `SK-C-301.jpg`, ready in the file picker. It previously returned a correct dog candidate at the lower right; describe the result actually returned, without promising an exact score.
+- Open `worker/detections.ts`, `scripts/detect.mjs`, and the README setup instructions in the editor. Increase the font size for the recording.
+- Prepare a terminal in the repository with Node 24 and your key already configured in the ignored `.dev.vars` file. Close that file and any credential screens before recording.
+- Stage the command below, but run it during the reproduction segment. Outputs go under ignored `artifacts/`.
+- Keep another browser tab on the saved La Grande Jatte example for the threshold demonstration. This makes that observed failure repeatable even if the live response changes. Identify it as a saved result when switching.
+- If rehearsing live calls, leave a minute before recording so the shared six-request-per-minute limit does not interrupt you.
 
-## 0:00–0:35 — Problem and audience
+## 0:00–0:25 — Who this helps
 
-“I'm building for developers who work with museum and digital-library collections. Catalog search can tell you a painting contains a dog. It doesn't show you where to look. Dogs in the Details turns that label into a box, a close-up, and a reusable JSON result.”
+**Show:** The site title, then scroll to the painting and its detail panel.
 
-“These are public-domain paintings from the Art Institute of Chicago. This small collection was selected for a demo; I'm not claiming a collection-wide accuracy result.”
+> This is Dogs in the Details, a computer vision demo for developers building museum and digital-library interfaces. A catalog can tell you a painting contains a dog. I wanted to show where it is, let you inspect the detail, and export the location as data. The gallery contains forty public-domain paintings from the Art Institute of Chicago.
 
-## 0:35–1:15 — Show a real prediction
+## 0:25–0:55 — Make a live prediction
 
-Point to the saved-result label, then click **Find the dogs**.
+**Show:** Point to **Saved Roboflow result**, click **Find the dogs again**, and wait for **Live Roboflow result**. Click one detail to highlight its box. Explain the request while it runs.
 
-“The initial example is a saved, genuine Roboflow result. This button runs the model again. The browser calls my Cloudflare Worker, and the Worker sends the image to Roboflow Serverless. Roboflow runs RF-DETR Medium, its pretrained object-detection model.”
+> These initial boxes are a saved result from an earlier Roboflow run. Clicking here makes a fresh request. My Cloudflare Worker sends the painting to Roboflow Serverless, which runs RF-DETR Medium. Roboflow returns object labels, boxes, and confidence scores. My app keeps the dog predictions and draws them here. These close-ups are crops of the painting. We're locating objects, rather than outlining every pixel of a dog.
 
-Select each dog detail. Show its box in the painting and its enlarged crop.
+## 0:55–2:00 — What RF-DETR and COCO mean
 
-“This is detection: rectangular boxes and confidence scores. It isn't segmentation, and the close-up is simply a crop of the original image.”
+**Show:** Keep the painting and boxes visible for the first paragraph. Then show `worker/detections.ts`: first `MODEL_ID = 'coco/40'`, then `if (prediction.class !== 'dog') continue;`.
 
-## 1:15–1:45 — Try another image
+> RF-DETR is Roboflow's transformer-based object detector. The version I'm using is already trained on COCO: Common Objects in Context. COCO's detection task has eighty object categories, including dogs, cats, birds, horses, people, chairs, and bottles.
+>
+> During training, the model learned from photographs with labeled objects and boxes. At runtime, it turns image pixels into visual features and predicts which objects are present and where they are.
+>
+> I haven't trained it on these paintings, and I'm not sending a prompt saying “find the dogs.” The model produces predictions across its learned categories; this line keeps the ones labeled dog. Uploading an image doesn't retrain it.
+>
+> Roboflow provides the trained detector and the hosted service that runs it. I don't need to operate a GPU server. My application handles the collection, the interface, and the returned predictions.
 
-Choose **Upload**, select the prepared painting, then click **Find the dogs**. Point to the live-result label and the JSON export.
+## 2:00–2:30 — Show a limitation
 
-“You can also test your own collection. The browser prepares the image, and the same hosted detector runs on it. A direct image URL works when the source website allows browser imports; otherwise, download and upload the file. The app does not add these images to a public gallery.”
+**Show:** Switch to the prepared **saved** La Grande Jatte tab. Lower **Minimum confidence** from 35% to 25%. Point to the new box around the monkey at lower right, then restore 35%.
 
-Return to La Grande Jatte using the collection.
+> Back on this saved example, lowering the threshold brings in a monkey that the model labels as a dog. That's a false positive. The slider filters the same predictions; it doesn't call the model again. Confidence is a model score, not a guarantee. Paintings differ from its training photographs, and small or stylized dogs can be missed. No detection doesn't prove there's no dog.
 
-## 1:45–2:15 — Teach the limitation
+## 2:30–3:05 — Bring your own painting
 
-Lower the threshold to 0.25 on La Grande Jatte and point out the monkey candidate. Restore 0.35.
+**Show:** Choose **Try your own painting → Upload**, select `SK-C-301.jpg`, and click **Find the dogs**. Point to the result actually returned and to **JSON**. Mention URL support without attempting a second import.
 
-“A lower threshold admits more uncertain predictions. Here the monkey becomes a false dog candidate. The slider filters the same response; it doesn't call Roboflow again. Scores aren't a guarantee, and a human still needs to inspect the result.”
+> You can try an image from your own collection, too. I'll upload this still life and run the same detector. The browser resizes the image and removes embedded metadata before sending it. This app doesn't save uploads to its gallery. Direct image URLs also work when the source permits browser imports; otherwise, download and upload the file. The JSON button exports the detections.
 
-“A no-detection result is not proof of absence.” Skip switching to additional paintings to keep the recording short.
+## 3:05–4:10 — Show how to reproduce it
 
-## 2:15–3:10 — Explain the implementation
-
-Open `scripts/detect.mjs`, then `worker/detections.ts`.
-
-“The small script is the whole inference path without the UI. It reads an image, sends base64 bytes to Roboflow with a server-side bearer key, and filters the response to the dog class. I pin the REST endpoint to coco/40, the version behind the rfdetr-medium alias.”
-
-“Roboflow returns center-based pixel coordinates. I convert the left edge to x minus half the width, then divide by the image width. Normalized coordinates keep the overlay aligned as the browser resizes the painting.”
-
-“Collection requests use approved painting IDs. Visitor images use a bounded upload endpoint with format and dimension checks. Both share a request limit, and the key never reaches the browser.”
-
-## 3:10–4:00 — Reproduce it
-
-Show the README setup, then run:
+**Show:** In `scripts/detect.mjs`, highlight the `fetch` call, authorization header, and base64 body. Show the README clone/setup instructions. Run this prepared command, then open its JSON output:
 
 ```sh
-node --env-file=.dev.vars scripts/detect.mjs public/images/886.jpg --artwork-id 886 --output result.json
+node --env-file=.dev.vars scripts/detect.mjs public/images/886.jpg \
+  --artwork-id 886 --output artifacts/walkthrough/result.json
 ```
 
-Open `result.json`.
+> Here's the same inference path without the interface: read an image, send its bytes to Roboflow, and normalize the dog boxes. The API key stays on the server in the website. The endpoint, coco slash forty, pins the hosted model version.
+>
+> To reproduce this, clone the repository, use Node twenty-four, and put your own Roboflow key in the ignored configuration file. This command runs a prediction without installing any npm packages. The result contains dog labels, scores, and box coordinates expressed as fractions of the image dimensions. Replace the image path to try another painting. Hosted calls use your Roboflow credits.
 
-“Use Node 24, put your own Roboflow key in the ignored .dev.vars file, and run this command. It doesn't need a GPU or an npm install. Replace the image path to test your own painting. The full UI uses npm ci, npm run build, and npm run preview.”
+## 4:10–4:35 — Invite a useful next step
 
-## 4:00–4:30 — Decisions and invitation
+**Show:** Return to the live site and point to the GitHub icon. End with a painting and its result visible.
 
-“I used a pretrained model and a small, verified public-domain collection so the work could fit in four hours. RF-DETR can miss small or stylized dogs, confuse other animals, or produce overlapping boxes. The evaluation notes include those failures.”
+> This is a starting point for collection exploration, not an accuracy benchmark. Try your own painting at dogs dot zuchka dot dev, then use the GitHub link to inspect or adapt the code. I'd especially like examples of missed dogs or convincing false positives. Those are useful evidence for deciding what to improve next.
 
-“Try the public demo with an image from your own collection, then get the source on GitHub. I'd especially like examples where the detector misses an obvious dog or mistakes another animal for one.”
+## Recording contingencies — not spoken
 
-Stop by 4:45 even if you skip the final sentence. The assessment requires a recording shorter than five minutes.
+- If a live request fails or stalls, name that honestly and show the labeled saved result; do not present a cached result as live. Keep one successful live call or CLI run in the take if possible.
+- If the upload takes too long, skip the URL explanation and move to the code. Do not keep clicking inference while waiting.
+- Aim to finish around 4:35. At 4:30, jump to the closing invitation if needed; stop by 4:50.
+- Exact live scores and counts may differ. Describe what is visible instead of reading a predicted outcome from this script.
+
+## Accuracy notes and sources — not spoken
+
+- Say **COCO** like “cocoa.” It is a dataset, not the model. Its standard object-detection task has **80 classes**; `coco/40` means hosted project/version, not forty classes.
+- This project uses an RF-DETR **object-detection** checkpoint. Other RF-DETR checkpoints support segmentation, but this application returns rectangular boxes and makes image crops.
+- Dog filtering selects an existing category; it does not teach the model a new one. The current website displays dogs only, although the pretrained detector supports the other COCO classes.
+- The implementation and recorded fixtures establish this project's behavior. The external references below establish the model and dataset facts, checked October 16, 2026.
+- [Roboflow RF-DETR documentation](https://docs.roboflow.com/models/supported-models/rf-detr): transformer-based detector, COCO-pretrained checkpoints, hosted inference.
+- [COCO dataset](https://cocodataset.org/): Common Objects in Context.
+- [Roboflow's COCO class reference](https://roboflow.com/blog/microsoft-coco-classes): the 80 detection categories.
+- [Roboflow model aliases](https://github.com/roboflow/inference/blob/main/inference/models/aliases.py): `rfdetr-medium` maps to `coco/40`.
