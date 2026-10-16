@@ -48,6 +48,7 @@ test('live request sends only local image bytes and key in Authorization header'
   assert.equal(response.status, 200);
   const result = await response.json() as DetectionResult;
   assert.equal(result.mode, 'live');
+  assert.equal(result.source, 'collection');
   assert.equal(result.artworkId, 886);
   assert.equal(result.detections.length, 1);
   assert.equal(result.detections[0].x, 0.4);

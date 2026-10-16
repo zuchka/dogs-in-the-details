@@ -1,7 +1,7 @@
-import type { DetectionResult } from '../src/types.ts';
+import type { DetectionResult, ImageSourceKind } from '../src/types.ts';
 import { CONFIDENCE_FLOOR, InvalidInferenceResponse, MODEL_ID, MODEL_NAME, normalizeDetections } from './detections.ts';
+import { inspectImage, InvalidImage, MAX_IMAGE_BYTES } from './image-input.ts';
 
-const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const TIMEOUT_MS = 55_000;
 // Narrow the generated binding types so the handler can be exercised without a live account.
 type HandlerEnv = Pick<Env, 'ROBOFLOW_API_KEY' | 'INFERENCE_RATE_LIMITER'> & {
@@ -94,6 +94,9 @@ async function getArtworkImage(requestUrl: URL, env: HandlerEnv, artworkId: numb
 }
 
 function upstreamError(status: number): HttpError {
+  if (status === 400 || status === 422) {
+    return new HttpError(422, 'INVALID_IMAGE', 'Roboflow could not read this image. Try a different JPEG, PNG, or WebP file.');
+  }
   if (status === 401 || status === 403) {
     return new HttpError(503, 'INFERENCE_AUTH', 'Live inference is not configured correctly. Saved examples remain available.');
   }
@@ -106,6 +109,40 @@ function upstreamError(status: number): HttpError {
   return new HttpError(502, 'INFERENCE_FAILED', 'Roboflow could not complete this request. Try again or view a saved example.');
 }
 
+async function admitInference(request: Request, env: HandlerEnv): Promise<string> {
+  const apiKey = env.ROBOFLOW_API_KEY?.trim();
+  if (!apiKey) throw new HttpError(503, 'INFERENCE_NOT_CONFIGURED', 'Live inference is not configured. Saved examples remain available.');
+  // All image sources share this budget. It is per Cloudflare location, not a global spend cap.
+  const admitted = await env.INFERENCE_RATE_LIMITER.limit({ key: request.headers.get('CF-Connecting-IP') ?? 'local-development' });
+  if (!admitted.success) throw new HttpError(429, 'RATE_LIMITED', 'Please wait a minute before running another detection.');
+  return apiKey;
+}
+
+async function runInference(image: Uint8Array, apiKey: string, artworkId: number | null,
+  source: ImageSourceKind, inferFetch: typeof fetch): Promise<DetectionResult> {
+  const inferenceUrl = new URL(`https://serverless.roboflow.com/${MODEL_ID}`);
+  inferenceUrl.search = new URLSearchParams({
+    confidence: String(CONFIDENCE_FLOOR), overlap: '0.5', max_detections: '100', disable_active_learning: 'true',
+  }).toString();
+  const started = Date.now();
+  const response = await inferFetch(inferenceUrl, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: base64(image), signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  if (!response.ok) throw upstreamError(response.status);
+  let raw: unknown;
+  try { raw = JSON.parse(new TextDecoder().decode(await readBounded(response, 2 * 1024 * 1024))); }
+  catch (error) {
+    if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) throw error;
+    throw new InvalidInferenceResponse();
+  }
+  return {
+    artworkId, source, model: MODEL_NAME, mode: 'live', generatedAt: new Date().toISOString(),
+    durationMs: Date.now() - started, ...normalizeDetections(raw),
+  };
+}
+
 export async function handleRequest(request: Request, env: HandlerEnv, inferFetch: typeof fetch = fetch): Promise<Response> {
   const url = new URL(request.url);
   if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
@@ -114,11 +151,24 @@ export async function handleRequest(request: Request, env: HandlerEnv, inferFetc
       if (request.method !== 'GET') return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Use GET.' } }, 405, { Allow: 'GET' });
       return json({ configured: Boolean(env.ROBOFLOW_API_KEY?.trim()) });
     }
-    if (url.pathname !== '/api/detect' && url.pathname !== '/api/events') throw new HttpError(404, 'NOT_FOUND', 'This API route does not exist.');
+    if (!['/api/detect', '/api/detect-upload', '/api/events'].includes(url.pathname)) throw new HttpError(404, 'NOT_FOUND', 'This API route does not exist.');
     if (request.method !== 'POST') return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Use POST.' } }, 405, { Allow: 'POST' });
     const origin = request.headers.get('origin');
     if (origin && origin !== url.origin) throw new HttpError(403, 'INVALID_ORIGIN', 'Use the demo website to request inference.');
-    if (request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json') {
+    const contentType = request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() ?? '';
+    if (url.pathname === '/api/detect-upload') {
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(contentType)) {
+        throw new HttpError(415, 'CONTENT_TYPE', 'Send a JPEG, PNG, or WebP image as the request body.');
+      }
+      const source = request.headers.get('x-image-source') ?? 'upload';
+      if (source !== 'upload' && source !== 'url') throw new HttpError(400, 'INVALID_SOURCE', 'Image source must be upload or url.');
+      // Admission precedes reading/validating the image or encoding an outbound request.
+      const apiKey = await admitInference(request, env);
+      const image = await readBounded(request, MAX_IMAGE_BYTES);
+      inspectImage(image, contentType);
+      return json(await runInference(image, apiKey, null, source, inferFetch));
+    }
+    if (contentType !== 'application/json') {
       throw new HttpError(415, 'CONTENT_TYPE', 'Send application/json.');
     }
     let body: unknown;
@@ -144,34 +194,9 @@ export async function handleRequest(request: Request, env: HandlerEnv, inferFetc
       return json({ accepted: true }, 202);
     }
     if (Object.keys(body).length !== 1) throw new HttpError(400, 'INVALID_REQUEST', 'Send only artworkId.');
-    const apiKey = env.ROBOFLOW_API_KEY?.trim();
-    if (!apiKey) throw new HttpError(503, 'INFERENCE_NOT_CONFIGURED', 'Live inference is not configured. Saved examples remain available.');
-    // Anonymous demo: limits are per network address and Cloudflare location, not a global spend cap.
-    const admitted = await env.INFERENCE_RATE_LIMITER.limit({ key: request.headers.get('CF-Connecting-IP') ?? 'local-development' });
-    if (!admitted.success) throw new HttpError(429, 'RATE_LIMITED', 'Please wait a minute before running another detection.');
+    const apiKey = await admitInference(request, env);
     const image = await getArtworkImage(url, env, artworkId);
-    const inferenceUrl = new URL(`https://serverless.roboflow.com/${MODEL_ID}`);
-    inferenceUrl.search = new URLSearchParams({
-      confidence: String(CONFIDENCE_FLOOR), overlap: '0.5', max_detections: '100', disable_active_learning: 'true',
-    }).toString();
-    const started = Date.now();
-    const response = await inferFetch(inferenceUrl, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: base64(image), signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-    if (!response.ok) throw upstreamError(response.status);
-    let raw: unknown;
-    try { raw = JSON.parse(new TextDecoder().decode(await readBounded(response, 2 * 1024 * 1024))); }
-    catch (error) {
-      if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) throw error;
-      throw new InvalidInferenceResponse();
-    }
-    const result: DetectionResult = {
-      artworkId, model: MODEL_NAME, mode: 'live', generatedAt: new Date().toISOString(),
-      durationMs: Date.now() - started, ...normalizeDetections(raw),
-    };
-    return json(result);
+    return json(await runInference(image, apiKey, artworkId, 'collection', inferFetch));
   } catch (error) {
     if (error instanceof HttpError) {
       return json({ error: { code: error.code, message: error.message } }, error.status,
@@ -179,6 +204,9 @@ export async function handleRequest(request: Request, env: HandlerEnv, inferFetc
     }
     if (error instanceof InvalidInferenceResponse) {
       return json({ error: { code: 'INVALID_INFERENCE_RESPONSE', message: error.message } }, 502);
+    }
+    if (error instanceof InvalidImage) {
+      return json({ error: { code: 'INVALID_IMAGE', message: error.message } }, 422);
     }
     if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
       return json({ error: { code: 'INFERENCE_TIMEOUT', message: 'Roboflow took too long to respond. Try again or view a saved example.' } }, 504);

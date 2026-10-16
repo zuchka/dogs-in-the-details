@@ -22,8 +22,10 @@ The key is never placed in a URL, returned to the browser, or included in logs. 
 ## Browser API
 
 - `GET /api/health` returns `{ "configured": true }` when the secret is present. This reports configuration, not a successful provider connection.
-- `POST /api/detect` accepts only `{ "artworkId": 886 }`. It reads the public-domain manifest and the corresponding bundled `/images/886.jpg` through the Worker asset binding. It never accepts an arbitrary URL or uploaded image.
-- Success returns the `DetectionResult` contract in `src/types.ts`, with `mode: "live"`, a timestamp, measured request duration, returned image dimensions, and dog detections. API responses use `Cache-Control: no-store`.
+- `POST /api/detect` accepts only `{ "artworkId": 886 }`. It reads the public-domain manifest and the corresponding bundled `/images/886.jpg` through the Worker asset binding; successful results have `source: "collection"`.
+- `POST /api/detect-upload` accepts raw JPEG, PNG, or WebP bytes with the matching `Content-Type`. The optional `X-Image-Source` header is `upload` (default) or `url`. Results have `artworkId: null` and that source. Multipart uploads, JSON, unsupported types, invalid headers, and oversized images are rejected.
+- There is no server-side URL-fetch endpoint. The browser imports a public HTTPS image using CORS, without credentials or a referrer, and rejects redirects. It validates and re-encodes the image before using the same upload endpoint. A host that blocks browser downloads requires the file-upload fallback. The API never receives the submitted URL or filename, so it does not have an arbitrary-URL proxy or server-side DNS/redirect boundary to secure.
+- Success returns the `DetectionResult` contract in `src/types.ts`, with `mode: "live"`, a timestamp, measured request duration, returned image dimensions, and dog detections. API responses use `Cache-Control: no-store`. The application does not explicitly store uploaded image bytes, filenames, or submitted URLs, and does not log them. Image bytes are sent to Roboflow for hosted processing, with active learning disabled.
 - Errors return `{ "error": { "code": "...", "message": "..." } }`. A failed live run never becomes a saved or empty successful result.
 
 Saved examples are genuine earlier responses supplied by the application. Their display mode must be `saved`; refreshing the browser does not perform a live inference.
@@ -42,7 +44,7 @@ In Cloudflare Workers Logs, filter for `event = live_inference_exported` and cou
 
 ## Reproduce one result
 
-Use Node 22.18 or later. Put the key in the ignored `.dev.vars` file as `ROBOFLOW_API_KEY=...`, or provide it through the process environment. The following call sends the local museum image to Roboflow and prints a normalized result:
+Use Node 24. Put the key in the ignored `.dev.vars` file as `ROBOFLOW_API_KEY=...`, or provide it through the process environment. The following call sends the local museum image to Roboflow and prints a normalized result:
 
 ```sh
 node --env-file=.dev.vars scripts/detect.mjs public/images/886.jpg --artwork-id 886
@@ -66,9 +68,9 @@ The parser retains only `class: "dog"` at a score of at least `0.1`. The interfa
 
 ## Limits and failures
 
-The Worker caps request JSON at 1 KB, image bytes at 8 MB, and the provider response at 2 MB. Roboflow's documented upload limit is 20 MB. A 55-second timeout allows for model cold starts; no automatic retry spends another request without a new user action. Authentication, quota, malformed-output, rate-limit, and timeout states have distinct safe error codes.
+The Worker caps request JSON at 1 KiB, image bytes at 8 MiB, and the provider response at 2 MiB. Uploaded container headers must declare at most 20 megapixels and 10,000 pixels on either side. File signatures must match the MIME type; APNG and animated WebP are rejected. Header inspection does not prove that every compressed pixel is valid: Roboflow performs the final decode, with a safe invalid-image error on failure. Roboflow's documented upload limit is 20 MB. A 55-second timeout allows for model cold starts; no automatic retry spends another request without a new user action. Authentication, quota, malformed-output, rate-limit, and timeout states have distinct safe error codes.
 
-The `INFERENCE_RATE_LIMITER` binding admits six requests per minute per network address at a Cloudflare location. Shared networks share this allowance. Cloudflare's limiter is eventually consistent and **is not a global billing cap**. See [Cloudflare's rate-limit behavior](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/) and [Roboflow's cold-start and error guidance](https://docs.roboflow.com/deployment/production-checklist).
+The `INFERENCE_RATE_LIMITER` binding admits six requests per minute per network address at a Cloudflare location. Collection inference, uploads, and URL imports share this allowance; upload admission happens before the body is read. Shared networks share this allowance. Cloudflare's limiter is eventually consistent and **is not a global billing cap**. See [Cloudflare's rate-limit behavior](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/) and [Roboflow's cold-start and error guidance](https://docs.roboflow.com/deployment/production-checklist).
 
 ## Friction encountered
 
