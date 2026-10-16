@@ -6,5 +6,5 @@
     "resolveJsonModule": true, "allowImportingTsExtensions": true, "noEmit": true,
     "types": ["vite/client", "node"]
   },
-  "include": ["src", "worker", "tests", "vite.config.ts"]
+  "include": ["src", "worker", "tests", "vite.config.ts", "worker-configuration.d.ts"]
 }

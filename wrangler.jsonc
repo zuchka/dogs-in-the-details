@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "dogs-in-the-details",
+  "account_id": "b5a19010c0fa72255f749f63b2ec0962",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-16",
+  "workers_dev": true,
+  "routes": [{ "pattern": "dogs.zuchka.dev", "custom_domain": true }],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "secrets": { "required": ["ROBOFLOW_API_KEY"] },
+  "ratelimits": [{
+    "name": "INFERENCE_RATE_LIMITER",
+    "namespace_id": "202610161",
+    "simple": { "limit": 6, "period": 60 }
+  }],
+  "observability": { "enabled": true, "traces": { "enabled": true } }
+}
