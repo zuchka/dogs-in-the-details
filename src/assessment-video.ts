@@ -1,5 +1,5 @@
-// Set this after the finished recording is uploaded. Use a public HTTPS MP4
-// URL, or /walkthrough.mp4 for a file placed in public/ (under 25 MiB).
+// The original recording is hosted in R2 because it exceeds the 25 MiB
+// Worker static-asset limit. Keep large media out of the Git repository.
 export const walkthroughVideo: { src: string | null; captionsSrc?: string } = {
-  src: null,
+  src: 'https://dogs-media.zuchka.dev/walkthrough-2026-10-16.mp4',
 };
