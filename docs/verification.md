@@ -41,6 +41,16 @@ The public GitHub repository is [zuchka/dogs-in-the-details](https://github.com/
 
 The artwork pilot is documented separately in [evaluation.md](evaluation.md). It is qualitative and deliberately includes failures. No custom training, segmentation, or collection-wide benchmark was attempted.
 
+## Forty-work gallery expansion
+
+- The catalog discovery script returned 66 public-domain paintings with an image and dog-related titles or subject tags. Thirty-two were selected before running inference, bringing the gallery to 40 works.
+- All 40 manifest entries have unique IDs, museum source links, `publicDomain: true`, and JPEG dimensions matching their local files. The default fetcher reproduces the same 40 IDs.
+- Each addition received one real hosted `coco/40` request. All 40 saved result files match their artwork IDs and dimensions, and their normalized boxes stay within the image. The original eight responses and timestamps were reused.
+- Among the 32 additions, 23 have at least one candidate above 0.35 and nine have none. This describes model outputs, not accuracy or the number of paintings that actually contain dogs.
+- The browser loaded the new *Landscape with Dog* example with a 92% dog candidate. Accent-insensitive search for `raffaelli` returned two works; selecting *Notre Dame de Paris* opened its saved result and correct plate number. An unmatched query showed a clear empty state.
+- “Browse all” displayed all 40 cards in a five-column desktop grid and a two-column grid at 375 CSS pixels, with no horizontal page overflow.
+- All 30 tests, TypeScript, the production build, and the credential audit passed after the expansion.
+
 ## Recording and submission
 
 The walkthrough script and launch note are prepared. A human-narrated recording and the final submission email remain manual deliverables. Do not describe those as completed until the video is recorded and the email is actually sent.
