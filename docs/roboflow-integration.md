@@ -1,10 +1,19 @@
 # Hosted Roboflow integration
 
-The model runs on **Roboflow's Serverless Cloud API**. The browser renders the returned boxes; it does not run RF-DETR locally. No model training or GPU installation is required.
+The models run on **Roboflow's Serverless Cloud API**. The browser renders returned boxes or mask polygons; it does not run RF-DETR locally. No model training or GPU installation is required.
 
 ## Model and request
 
-This demo pins `coco/40`, the project/version behind Roboflow's `rfdetr-medium` alias. The mapping was checked against [Roboflow's alias registry](https://github.com/roboflow/inference/blob/main/inference/models/aliases.py) on October 16, 2026. [The RF-DETR documentation](https://docs.roboflow.com/models/supported-models/rf-detr) describes the hosted model and its COCO training domain.
+This demo pins two hosted versions:
+
+| UI mode | Alias | Project/version | Output |
+| --- | --- | --- | --- |
+| Boxes (default) | `rfdetr-medium` | `coco/40` | Object boxes |
+| Outlines | `rfdetr-seg-medium` | `coco-dataset-vdnr1/37` | Object boxes and instance-mask polygons |
+
+The mappings were checked against [Roboflow's alias registry](https://github.com/roboflow/inference/blob/main/inference/models/aliases.py) on October 16, 2026. [The RF-DETR documentation](https://docs.roboflow.com/models/supported-models/rf-detr) describes both hosted checkpoint families. Both are pretrained on COCO's 80 object categories. Neither request contains a text prompt, and this project does not train either model.
+
+The mode control selects a checkpoint; it does not turn an existing box into a mask. Predictions and scores can therefore differ between modes. Original box results remain available independently of segmentation.
 
 The integration sends:
 
@@ -19,16 +28,19 @@ Content-Type: application/x-www-form-urlencoded
 
 The key is never placed in a URL, returned to the browser, or included in logs. Current hosted API documentation recommends [header-based authentication](https://docs.roboflow.com/deployment/roboflow-cloud/serverless-api). The actual endpoint and parameters were checked against the hosted [OpenAPI specification](https://serverless.roboflow.com/openapi.json) and exercised with a real museum image.
 
+Segmentation uses the same request format with `/coco-dataset-vdnr1/37` in place of `/coco/40`.
+
 ## Browser API
 
 - `GET /api/health` returns `{ "configured": true }` when the secret is present. This reports configuration, not a successful provider connection.
 - `POST /api/detect` accepts only `{ "artworkId": 886 }`. It reads the public-domain manifest and the corresponding bundled `/images/886.jpg` through the Worker asset binding; successful results have `source: "collection"`.
 - `POST /api/detect-upload` accepts raw JPEG, PNG, or WebP bytes with the matching `Content-Type`. The optional `X-Image-Source` header is `upload` (default) or `url`. Results have `artworkId: null` and that source. Multipart uploads, JSON, unsupported types, invalid headers, and oversized images are rejected.
+- Both inference routes accept `?mode=segmentation` to select the outline checkpoint. An omitted mode or `?mode=detection` selects the original detector. This query parameter is separate from the result's `mode: "live" | "saved"`, which describes result provenance.
 - There is no server-side URL-fetch endpoint. The browser imports a public HTTPS image using CORS, without credentials or a referrer, and rejects redirects. It validates and re-encodes the image before using the same upload endpoint. A host that blocks browser downloads requires the file-upload fallback. The API never receives the submitted URL or filename, so it does not have an arbitrary-URL proxy or server-side DNS/redirect boundary to secure.
-- Success returns the `DetectionResult` contract in `src/types.ts`, with `mode: "live"`, a timestamp, measured request duration, returned image dimensions, and dog detections. API responses use `Cache-Control: no-store`. The application does not explicitly store uploaded image bytes, filenames, or submitted URLs, and does not log them. Image bytes are sent to Roboflow for hosted processing, with active learning disabled.
+- Success returns the `DetectionResult` contract in `src/types.ts`, with `mode: "live"`, `inferenceMode: "detection" | "segmentation"`, a timestamp, measured request duration, returned image dimensions, and dog detections. Older saved results without `inferenceMode` use detection. API responses use `Cache-Control: no-store`. The application does not explicitly store uploaded image bytes, filenames, or submitted URLs, and does not log them. Image bytes are sent to Roboflow for hosted processing, with active learning disabled.
 - Errors return `{ "error": { "code": "...", "message": "..." } }`. A failed live run never becomes a saved or empty successful result.
 
-Saved examples are genuine earlier responses supplied by the application. Their display mode must be `saved`; refreshing the browser does not perform a live inference.
+Saved examples are genuine earlier responses supplied by the application. Their display mode must be `saved`; refreshing the browser does not perform a live inference. The browser keeps results separately for each image and checkpoint. Switching Boxes/Outlines may reuse a saved or already-fetched result; **Find the dogs** makes a fresh request for the selected checkpoint. A segmentation failure is shown as an error, and the user can return to Boxes.
 
 ## Trial activation measurement
 
@@ -52,6 +64,16 @@ Use Node 24. Put the key in the ignored `.dev.vars` file as `ROBOFLOW_API_KEY=..
 node --env-file=.dev.vars scripts/detect.mjs public/images/886.jpg --artwork-id 886
 ```
 
+Select the segmentation checkpoint explicitly to include normalized mask polygons:
+
+```sh
+node --env-file=.dev.vars scripts/detect.mjs public/images/886.jpg \
+  --artwork-id 886 \
+  --mode segmentation
+```
+
+The default is `--mode detection`. `--artwork-id` labels the output; the image path determines the pixels sent to Roboflow.
+
 To retain the raw provider response and normalized output for inspection:
 
 ```sh
@@ -66,7 +88,9 @@ node --env-file=.dev.vars scripts/detect.mjs public/images/886.jpg --artwork-id 
 
 Roboflow returns `(x, y)` as a box's center in pixels. For returned image width `W` and height `H`, the top-left corner is `((x - width/2)/W, (y - height/2)/H)`. The other corner is normalized the same way. Both corners are clamped to `[0, 1]`; zero-area boxes outside the image are discarded. We use the **returned image dimensions**, not the museum's original dimensions.
 
-The parser retains only `class: "dog"` at a score of at least `0.1`. The interface can apply a higher threshold locally without making another inference call. Scores are model confidence values, not calibrated probabilities. Low thresholds may expose duplicate predictions, misses, and false positives. Painted dogs differ from the photographs in COCO; these examples are a demonstration, not a validated collection-wide accuracy estimate.
+Segmentation predictions also contain `points: [{x, y}, ...]` in whole-image pixel coordinates. Normalize each point to `{x: x/W, y: y/H}` and clamp to `[0, 1]`. These points describe a polygon, not coordinates relative to the prediction's bounding box. The UI draws that polygon over the same image; rectangular boxes remain available for detail crops. Older box-only saved responses remain valid without `points`.
+
+The parser retains only `class: "dog"` at a score of at least `0.1`. The interface can apply a higher threshold locally without making another inference call. Scores are model confidence values, not calibrated probabilities. Low thresholds may expose duplicate predictions, misses, and false positives. Mask boundaries are approximate, and masks do not guarantee a correct class label. Painted dogs differ from the photographs in COCO; these examples are a demonstration, not a validated collection-wide accuracy estimate. See the separate [segmentation spot-check](segmentation-evaluation.md).
 
 ## Limits and failures
 

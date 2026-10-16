@@ -1,16 +1,18 @@
 # Dogs in the Details
 
-Find and inspect dogs in public-domain paintings with **Roboflow's hosted RF-DETR Medium**. Built for developers working on museum, library, and digital-collection interfaces.
+Find and inspect dogs in public-domain paintings with **Roboflow's hosted RF-DETR detection and segmentation models**. Built for developers working on museum, library, and digital-collection interfaces.
 
 **[Try the demo](https://dogs.zuchka.dev)** · **[Source on GitHub](https://github.com/zuchka/dogs-in-the-details)**
 
-The useful output is a location: a box and a close-up you can inspect, share, or export. Dog-related catalog titles and subject tags helped select the examples. This project does not claim to discover missing metadata or replace a curator's judgment.
+The useful output is a location: a box or an approximate dog outline, plus a close-up you can inspect, share, or export. Dog-related catalog titles and subject tags helped select the examples. This project does not claim to discover missing metadata or replace a curator's judgment.
 
 The gallery contains **40 public-domain paintings**. Search by title or artist, or choose **Browse all** to open the full grid. Each work has a genuine saved Roboflow result; **Find the dogs** runs fresh inference.
 
+Choose **Boxes** for the original detector or **Outlines** for instance segmentation. These select different pretrained RF-DETR checkpoints, so their dogs and confidence scores can differ. Switching can reuse a saved or previously fetched result for that image and mode; **Find the dogs** always requests a fresh result. Boxes remains the default and the fallback if segmentation is unavailable.
+
 ## Try your own painting
 
-Choose **Upload** or **Image URL** in the demo, preview your image, then click **Find the dogs**. The result uses the same boxes, detail crops, confidence slider, and JSON export as the museum examples.
+Choose **Upload** or **Image URL** in the demo, preview your image, choose **Boxes** or **Outlines**, then click **Find the dogs**. The result uses the same overlays, detail crops, confidence slider, and JSON export as the museum examples.
 
 - JPEG, PNG, and WebP files up to 8 MiB are supported. Original images must be under 40 megapixels and 16,384 pixels on either side.
 - The browser applies image orientation, resizes the longest edge to at most 2,048 pixels, and creates a JPEG without the original metadata. This exact image is both displayed and sent for inference.
@@ -36,7 +38,16 @@ cp .env.example .dev.vars
 node --env-file=.dev.vars scripts/detect.mjs public/images/886.jpg --artwork-id 886
 ```
 
-The standalone command needs no npm dependencies. To try your own JPEG or PNG, replace the image path and use any positive numeric `--artwork-id` as its output identifier. Images must be under 8 MB. Add `--output result.json` to save normalized dog boxes, or `--raw-output raw.json` to inspect every class returned by the model.
+The standalone command needs no npm dependencies. To try your own JPEG or PNG, replace the image path and use any positive numeric `--artwork-id` as its output identifier. Images must be under 8 MB. Add `--output result.json` to save the normalized predictions, or `--raw-output raw.json` to inspect every class returned by the model.
+
+For dog outlines, select the segmentation checkpoint:
+
+```sh
+node --env-file=.dev.vars scripts/detect.mjs public/images/886.jpg \
+  --artwork-id 886 --mode segmentation
+```
+
+Omitting `--mode` preserves the original box detector. Segmentation predictions retain their boxes and add normalized polygon `points`.
 
 ## Run the website locally
 
@@ -52,25 +63,25 @@ For UI development, run `npm run dev:api` in one terminal and `npm run dev` in a
 
 ## What Roboflow does
 
-The model is the COCO-pretrained **RF-DETR Medium object detector**, executed on **Roboflow Serverless**, a hosted Roboflow product. This is not a local model demo. No custom training was performed.
+Both modes run COCO-pretrained **RF-DETR** checkpoints on **Roboflow Serverless**, a hosted Roboflow product. Boxes uses RF-DETR Medium; Outlines uses RF-DETR Seg Medium. Both recognize COCO's 80 object categories, without a text prompt or custom training for these paintings.
 
 1. For a collection painting, the browser posts its numeric ID to `/api/detect`. For a visitor image, it posts the prepared image bytes to `/api/detect-upload`.
 2. A Cloudflare Worker validates the request, enforces the shared rate limit, and sends the image bytes to Roboflow. The key stays on the server. Image URLs are imported by the browser; our server never fetches a visitor-supplied URL.
-3. Roboflow predicts classes, confidence scores, and center-based pixel boxes.
-4. The Worker keeps `dog` predictions and converts their boxes into fractions of the original image, measured from its top-left corner.
-5. React draws those boxes and crops the same image. The slider filters the returned predictions locally; it does not run the model again.
+3. Roboflow predicts classes, confidence scores, and center-based pixel boxes. The segmentation checkpoint also returns polygon points describing each predicted instance's mask.
+4. The Worker keeps `dog` predictions and converts boxes and any polygon points into fractions of the returned image dimensions, measured from its top-left corner.
+5. React draws the boxes or mask polygons and crops the same image. The slider filters the returned predictions locally; it does not run the model again.
 
-This uses **object detection**, not segmentation. A crop is a rectangular view of the painting, not a pixel mask of the dog. Confidence is a model score, not a calibrated probability of correctness.
+**Object detection** locates a dog with a rectangle. **Instance segmentation** also estimates its silhouette. The outline is approximate, and a convincing mask can still belong to a misclassified animal. Detail crops remain rectangular in both modes. Confidence is a model score, not a calibrated probability of correctness.
 
 ```mermaid
 flowchart LR
   A[Collection painting or prepared visitor image] --> B[Cloudflare Worker]
   B --> C[Roboflow Serverless RF-DETR]
-  C --> D[Dog boxes and scores]
+  C --> D[Dog boxes, optional masks, and scores]
   D --> E[Overlays, details, JSON export]
 ```
 
-The HTTP endpoint is pinned to `coco/40`, the underlying version mapped from `rfdetr-medium` in Roboflow's SDK. See [integration notes](docs/roboflow-integration.md) for the verified request format and links.
+The HTTP endpoints are pinned to `coco/40` for `rfdetr-medium` and `coco-dataset-vdnr1/37` for `rfdetr-seg-medium`, using the mappings in Roboflow's SDK. See [integration notes](docs/roboflow-integration.md) for the request format and links.
 
 ## Saved results and limitations
 
@@ -78,7 +89,7 @@ Saved examples are actual hosted Roboflow responses generated during the build. 
 
 The model was pretrained on photographs, not this painting collection. Small dogs, dark interiors, stylized forms, partial occlusion, other animals, and duplicate low-confidence boxes are useful failure cases. A zero-result response means the model found nothing above the chosen threshold; it does not prove there is no dog. The 40 hand-selected paintings are an exploratory gallery, not an accuracy benchmark. The original eight-image pilot retains its separate qualitative evaluation.
 
-See [evaluation notes](docs/evaluation.md) and [artwork provenance](docs/artwork-notes.md). Public-domain status was checked for every bundled image using the [Art Institute of Chicago API](https://api.artic.edu/docs/). The museum does not endorse this project.
+See the original [detection evaluation](docs/evaluation.md), the separate [segmentation spot-check](docs/segmentation-evaluation.md), and [artwork provenance](docs/artwork-notes.md). Public-domain status was checked for every bundled image using the [Art Institute of Chicago API](https://api.artic.edu/docs/). The museum does not endorse this project.
 
 ## Deploy your own copy
 
@@ -104,7 +115,7 @@ Use a dedicated, least-privilege inference key where your Roboflow plan supports
 | `scripts/detect.mjs` | Minimal local-image reproduction |
 | `scripts/fetch-artworks.py` | Fetch public-domain Chicago images, sequentially |
 | `scripts/discover-artworks.py` | Search public-domain paintings by dog-related titles and subject tags |
-| `public/results` | Genuine saved inference results |
+| `public/results`, `public/results-segmentation` | Genuine saved results, kept separately by checkpoint |
 
 ```sh
 npm test
