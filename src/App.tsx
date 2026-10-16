@@ -14,7 +14,7 @@ function displayDate(iso: string) {
   return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(iso));
 }
 
-function recordLiveExport(artworkId: number | null, source: ImageSourceKind) {
+function recordLiveExport(source: ImageSourceKind) {
   try {
     const key = 'dogs-in-the-details-session';
     const sessionId = sessionStorage.getItem(key) ?? crypto.randomUUID();
@@ -22,7 +22,7 @@ function recordLiveExport(artworkId: number | null, source: ImageSourceKind) {
     void fetch('/api/events', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event: 'live_inference_exported', sessionId, artworkId, source }),
+      body: JSON.stringify({ event: 'live_inference_exported', sessionId, source }),
       keepalive: true,
     }).catch(() => { /* Analytics must not interrupt the download. */ });
   } catch { /* Export remains available when session storage is restricted. */ }
@@ -177,7 +177,7 @@ function App() {
     link.download = `dogs-in-the-details-${customImage ? customImage.source : artwork.id}.json`;
     link.click();
     URL.revokeObjectURL(url);
-    if (result.mode === 'live') recordLiveExport(artwork.id, customImage?.source ?? 'collection');
+    if (result.mode === 'live') recordLiveExport(customImage?.source ?? 'collection');
   }
 
   function chooseArtwork(id: number) {
