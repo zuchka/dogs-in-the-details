@@ -34,7 +34,8 @@ test('output keeps orientation and aspect ratio while limiting the longest edge'
 
 test('image links permit public HTTPS but reject local hosts and credentials', () => {
   assert.equal(validateImageUrl(' https://www.artic.edu/iiif/image.jpg?size=843 '), 'https://www.artic.edu/iiif/image.jpg?size=843');
-  for (const url of ['http://example.com/a.jpg', 'https://localhost/a.jpg', 'https://127.0.0.1/a.jpg', 'https://192.168.1.1/a.jpg', 'https://[::1]/a.jpg', 'https://name:secret@example.com/a.jpg', 'https://example.com/a.jpg#fragment', 'file:///tmp/a.jpg']) {
+  for (const url of ['http://example.com/a.jpg', 'https://localhost/a.jpg', 'https://127.0.0.1/a.jpg', 'https://192.168.1.1/a.jpg', 'https://[::1]/a.jpg', 'https://name:secret@example.com/a.jpg', 'https://example.com:8080/a.jpg', 'https://example.com/a.jpg#fragment', 'file:///tmp/a.jpg']) {
     assert.throws(() => validateImageUrl(url));
   }
+  assert.throws(() => validateImageUrl('https://example.com/%ZZ.jpg'), /invalid character/);
 });

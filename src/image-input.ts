@@ -40,15 +40,15 @@ export function inspectImage(bytes: Uint8Array, type: string) {
       }
       offset += length;
     }
-  } else if (type === 'image/webp' && bytes.length >= 30 && ascii(bytes, 0, 4) === 'RIFF' && ascii(bytes, 8, 4) === 'WEBP') {
+  } else if (type === 'image/webp' && bytes.length >= 25 && ascii(bytes, 0, 4) === 'RIFF' && ascii(bytes, 8, 4) === 'WEBP') {
     const format = ascii(bytes, 12, 4);
-    if (format === 'VP8X') {
+    if (format === 'VP8X' && bytes.length >= 30) {
       width = 1 + bytes[24] + (bytes[25] << 8) + (bytes[26] << 16);
       height = 1 + bytes[27] + (bytes[28] << 8) + (bytes[29] << 16);
     } else if (format === 'VP8L' && bytes[20] === 0x2f) {
       width = 1 + bytes[21] + ((bytes[22] & 0x3f) << 8);
       height = 1 + (bytes[22] >> 6) + (bytes[23] << 2) + ((bytes[24] & 0x0f) << 10);
-    } else if (format === 'VP8 ' && bytes[23] === 0x9d && bytes[24] === 0x01 && bytes[25] === 0x2a) {
+    } else if (format === 'VP8 ' && bytes.length >= 30 && bytes[23] === 0x9d && bytes[24] === 0x01 && bytes[25] === 0x2a) {
       width = view.getUint16(26, true) & 0x3fff;
       height = view.getUint16(28, true) & 0x3fff;
     }
@@ -98,7 +98,9 @@ export function validateImageUrl(input: string) {
     throw new Error('Use a public image website, or upload the image from your device.');
   }
   if (url.href.length > 2048) throw new Error('This image link is too long. Please upload the image instead.');
-  if (typeof window !== 'undefined' && url.origin === window.location.origin && /^\/api(?:\/|$)/.test(decodeURIComponent(url.pathname))) throw new Error('Use a direct image link, or upload an image from your device.');
+  let path: string;
+  try { path = decodeURIComponent(url.pathname); } catch { throw new Error('This image link contains an invalid character. Copy the original image link again, or upload the image instead.'); }
+  if (typeof window !== 'undefined' && url.origin === window.location.origin && /^\/api(?:\/|$)/.test(path)) throw new Error('Use a direct image link, or upload an image from your device.');
   return url.href;
 }
 
