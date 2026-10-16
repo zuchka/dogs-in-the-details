@@ -44,7 +44,8 @@ for (const artwork of artworks) {
     throw new Error(`Captured response does not match artwork ${artwork.id}`);
   }
   const saved = { ...result, mode: 'saved' };
-  await writeFile(join(root, `${resultsDirectory}/${artwork.id}.json`), `${JSON.stringify(saved, null, 2)}\n`);
+  // Polygon fixtures contain many points; keep those captures compact on disk.
+  await writeFile(join(root, `${resultsDirectory}/${artwork.id}.json`), `${JSON.stringify(saved, null, mode === 'segmentation' ? undefined : 2)}\n`);
   const visible = saved.detections.filter(detection => detection.confidence >= 0.35);
   console.log(`${artwork.id}: ${saved.detections.length} ${mode} candidates at 0.10; ${visible.length} at 0.35; ${saved.durationMs} ms`);
 }
