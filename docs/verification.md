@@ -63,4 +63,6 @@ The artwork pilot is documented separately in [evaluation.md](evaluation.md). It
 
 ## Recording and submission
 
+The `/assessment` page links the live demo and source, renders the 176-word launch note from its source document, and reserves a clearly labeled space for the recording. Chrome checks covered its desktop layout, section links, and a 390 CSS-pixel mobile view with no horizontal overflow. The production build and all 35 existing tests passed. Video playback remains unverified until the actual MP4 is supplied.
+
 The walkthrough script and launch note are prepared. A human-narrated recording and the final submission email remain manual deliverables. Do not describe those as completed until the video is recorded and the email is actually sent.

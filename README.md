@@ -2,7 +2,7 @@
 
 Find and inspect dogs in public-domain paintings with **Roboflow's hosted RF-DETR detection and segmentation models**. Built for developers working on museum, library, and digital-collection interfaces.
 
-**[Try the demo](https://dogs.zuchka.dev)** · **[Source on GitHub](https://github.com/zuchka/dogs-in-the-details)**
+**[Try the demo](https://dogs.zuchka.dev)** · **[Source on GitHub](https://github.com/zuchka/dogs-in-the-details)** · **[Assessment deliverables](https://dogs.zuchka.dev/assessment)**
 
 The useful output is a location: a box or an approximate dog outline, plus a close-up you can inspect, share, or export. Dog-related catalog titles and subject tags helped select the examples. This project does not claim to discover missing metadata or replace a curator's judgment.
 
@@ -104,11 +104,20 @@ The public demo shares a limit of six live inference requests per IP per minute 
 
 Use a dedicated, least-privilege inference key where your Roboflow plan supports scoped keys. Never commit `.dev.vars`. The supplied example contains no credentials.
 
+## Assessment page and walkthrough recording
+
+`/assessment` brings together the demo, source code, walkthrough, and launch note. Its 176-word note is imported directly from `docs/launch-note.md`; edit that file to update both the repository and page. The recording is explicitly marked as pending until a video is configured.
+
+To publish the finished walkthrough, export an MP4 with H.264 video and AAC audio, under five minutes. Set `src` in `src/assessment-video.ts` to its public HTTPS URL, then rebuild and deploy. The player provides native playback, seeking, volume, and fullscreen controls without autoplay. An optional `captionsSrc` accepts an English WebVTT file; the script link is available alongside the player.
+
+For an MP4 smaller than Cloudflare's [25 MiB static-asset limit](https://developers.cloudflare.com/changelog/post/2025-09-02-increased-static-asset-limits/), put it in `public/walkthrough.mp4` and use `/walkthrough.mp4`. For a larger recording, upload it to public object storage such as Cloudflare R2 and use that direct MP4 URL. Verify playback and seeking on the live page after upload. No recording is included yet.
+
 ## Project map and checks
 
 | Path | Responsibility |
 | --- | --- |
 | `src/App.tsx`, `src/styles.css` | Collection UI, overlays, and crops |
+| `src/Assessment.tsx`, `src/assessment-video.ts` | Assessment page and walkthrough video configuration |
 | `src/ImageImport.tsx`, `src/image-input.ts` | Upload/URL preview, size checks, orientation, and resizing |
 | `worker/index.ts` | Input validation, hosted call, rate limit, errors |
 | `worker/detections.ts` | Response validation and coordinate conversion |
