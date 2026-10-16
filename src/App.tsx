@@ -49,7 +49,7 @@ function App() {
   const [browseAll, setBrowseAll] = useState(false);
   const [manifestError, setManifestError] = useState('');
   const [result, setResult] = useState<DetectionResult | null>(null);
-  const [inferenceMode, setInferenceMode] = useState<InferenceMode>('detection');
+  const [inferenceMode, setInferenceMode] = useState<InferenceMode>(() => new URLSearchParams(window.location.search).get('mode') === 'segmentation' ? 'segmentation' : 'detection');
   const [threshold, setThreshold] = useState(DEFAULT_THRESHOLD);
   const [showBoxes, setShowBoxes] = useState(true);
   const [activeDetection, setActiveDetection] = useState<string | null>(null);
@@ -109,6 +109,8 @@ function App() {
     const url = new URL(window.location.href);
     if (customImage) url.searchParams.delete('artwork');
     else url.searchParams.set('artwork', String(selectedId));
+    if (outlining) url.searchParams.set('mode', 'segmentation');
+    else url.searchParams.delete('mode');
     window.history.replaceState({}, '', url);
     const cached = resultCache.current.get(resultKey);
     if (cached) setResult(cached);
