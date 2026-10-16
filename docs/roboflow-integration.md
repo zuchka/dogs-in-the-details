@@ -28,6 +28,18 @@ The key is never placed in a URL, returned to the browser, or included in logs. 
 
 Saved examples are genuine earlier responses supplied by the application. Their display mode must be `saved`; refreshing the browser does not perform a live inference.
 
+## Trial activation measurement
+
+The browser can send `POST /api/events` with exactly:
+
+```json
+{"event":"live_inference_exported","sessionId":"d4df4dde-7193-4358-a5f2-7acfd07462ab","artworkId":886}
+```
+
+Send this only when a visitor exports a fresh, successful live result. Generate a random UUID with `crypto.randomUUID()` and keep it in `sessionStorage`; send no name, email, or other identifying fields. Telemetry is best-effort: a network failure or rejected event must not interrupt the download. The server validates the event name, UUID, catalog ID, and 1 KB body limit, then writes a structured log containing only those three fields. It never calls Roboflow for an event.
+
+In Cloudflare Workers Logs, filter for `event = live_inference_exported` and count distinct `sessionId` values over the reporting period. This measures **anonymous sessions exporting live results**, a trial activation proxy. It is not proof of unique people or project adoption: sessions can reset and the public browser event can be forged. No third-party analytics service is required. Platform request logs have their own separate retention and metadata settings.
+
 ## Reproduce one result
 
 Use Node 22.18 or later. Put the key in the ignored `.dev.vars` file as `ROBOFLOW_API_KEY=...`, or provide it through the process environment. The following call sends the local museum image to Roboflow and prints a normalized result:

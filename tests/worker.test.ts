@@ -108,3 +108,34 @@ test('wrong method, remote browser origin, and unknown API route are rejected', 
   assert.equal((await handleRequest(remote, environment(), neverFetch)).status, 403);
   assert.equal((await handleRequest(new Request('https://demo.test/api/nope'), environment(), neverFetch)).status, 404);
 });
+
+const validEvent = { event: 'live_inference_exported', sessionId: 'd4df4dde-7193-4358-a5f2-7acfd07462ab', artworkId: 886 };
+function eventRequest(body: unknown) {
+  return new Request('https://demo.test/api/events', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+}
+
+test('a validated export event records only anonymous metric fields without inference or a key', async (t) => {
+  const log = t.mock.method(console, 'log', () => {});
+  const response = await handleRequest(eventRequest(validEvent), environment({ key: '' }), neverFetch);
+  assert.equal(response.status, 202);
+  assert.deepEqual(await response.json(), { accepted: true });
+  assert.equal(log.mock.callCount(), 1);
+  assert.deepEqual(JSON.parse(log.mock.calls[0].arguments[0]), validEvent);
+});
+
+test('unsupported events, extra fields, invalid UUIDs, unknown artworks, and oversized events are rejected', async (t) => {
+  const log = t.mock.method(console, 'log', () => {});
+  for (const [body, status] of [
+    [{ ...validEvent, event: 'arbitrary_event' }, 400],
+    [{ ...validEvent, sessionId: 'not-a-uuid' }, 400],
+    [{ ...validEvent, apiKey: 'not-allowed' }, 400],
+    [{ ...validEvent, artworkId: 999 }, 404],
+    [{ ...validEvent, event: 'x'.repeat(1025) }, 413],
+  ] as const) {
+    const response = await handleRequest(eventRequest(body), environment(), neverFetch);
+    assert.equal(response.status, status);
+  }
+  assert.equal(log.mock.callCount(), 0);
+});

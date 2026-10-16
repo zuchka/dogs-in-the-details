@@ -64,7 +64,7 @@ function base64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-async function getArtworkImage(requestUrl: URL, env: HandlerEnv, artworkId: number): Promise<Uint8Array> {
+async function assertKnownArtwork(requestUrl: URL, env: HandlerEnv, artworkId: number): Promise<void> {
   const catalogResponse = await env.ASSETS.fetch(new Request(new URL('/artworks.json', requestUrl)));
   if (!catalogResponse.ok) throw new HttpError(503, 'CATALOG_UNAVAILABLE', 'The artwork catalog is unavailable.');
   let catalog: unknown;
@@ -79,6 +79,11 @@ async function getArtworkImage(requestUrl: URL, env: HandlerEnv, artworkId: numb
   // Only the known local copy is sent. No browser-supplied URL or museum fetch is accepted.
   const imagePath = `/images/${artworkId}.jpg`;
   if (artwork.image !== imagePath) throw new HttpError(503, 'IMAGE_UNAVAILABLE', 'The artwork image is unavailable.');
+}
+
+async function getArtworkImage(requestUrl: URL, env: HandlerEnv, artworkId: number): Promise<Uint8Array> {
+  await assertKnownArtwork(requestUrl, env, artworkId);
+  const imagePath = `/images/${artworkId}.jpg`;
   const imageResponse = await env.ASSETS.fetch(new Request(new URL(imagePath, requestUrl)));
   if (!imageResponse.ok) throw new HttpError(503, 'IMAGE_UNAVAILABLE', 'The artwork image is unavailable.');
   const bytes = await readBounded(imageResponse, MAX_IMAGE_BYTES);
@@ -109,11 +114,11 @@ export async function handleRequest(request: Request, env: HandlerEnv, inferFetc
       if (request.method !== 'GET') return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Use GET.' } }, 405, { Allow: 'GET' });
       return json({ configured: Boolean(env.ROBOFLOW_API_KEY?.trim()) });
     }
-    if (url.pathname !== '/api/detect') throw new HttpError(404, 'NOT_FOUND', 'This API route does not exist.');
+    if (url.pathname !== '/api/detect' && url.pathname !== '/api/events') throw new HttpError(404, 'NOT_FOUND', 'This API route does not exist.');
     if (request.method !== 'POST') return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Use POST.' } }, 405, { Allow: 'POST' });
     const origin = request.headers.get('origin');
     if (origin && origin !== url.origin) throw new HttpError(403, 'INVALID_ORIGIN', 'Use the demo website to request inference.');
-    if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) {
+    if (request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json') {
       throw new HttpError(415, 'CONTENT_TYPE', 'Send application/json.');
     }
     let body: unknown;
@@ -122,10 +127,23 @@ export async function handleRequest(request: Request, env: HandlerEnv, inferFetc
     catch { throw new HttpError(400, 'INVALID_REQUEST', 'Send a JSON object containing artworkId.'); }
     if (!body || typeof body !== 'object' || Array.isArray(body)
       || !('artworkId' in body) || typeof body.artworkId !== 'number'
-      || !Number.isSafeInteger(body.artworkId) || body.artworkId <= 0 || Object.keys(body).length !== 1) {
-      throw new HttpError(400, 'INVALID_REQUEST', 'Send only a positive integer artworkId.');
+      || !Number.isSafeInteger(body.artworkId) || body.artworkId <= 0) {
+      throw new HttpError(400, 'INVALID_REQUEST', 'Send a positive integer artworkId.');
     }
     const artworkId = body.artworkId;
+    if (url.pathname === '/api/events') {
+      if (Object.keys(body).length !== 3 || !('event' in body) || body.event !== 'live_inference_exported'
+        || !('sessionId' in body) || typeof body.sessionId !== 'string'
+        || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.sessionId)) {
+        throw new HttpError(400, 'INVALID_EVENT', 'Send a supported event, UUID sessionId, and artworkId.');
+      }
+      const admitted = await env.INFERENCE_RATE_LIMITER.limit({ key: `events:${request.headers.get('CF-Connecting-IP') ?? 'local-development'}` });
+      if (!admitted.success) throw new HttpError(429, 'RATE_LIMITED', 'Please wait before sending another event.');
+      await assertKnownArtwork(url, env, artworkId);
+      console.log(JSON.stringify({ event: 'live_inference_exported', sessionId: body.sessionId, artworkId }));
+      return json({ accepted: true }, 202);
+    }
+    if (Object.keys(body).length !== 1) throw new HttpError(400, 'INVALID_REQUEST', 'Send only artworkId.');
     const apiKey = env.ROBOFLOW_API_KEY?.trim();
     if (!apiKey) throw new HttpError(503, 'INFERENCE_NOT_CONFIGURED', 'Live inference is not configured. Saved examples remain available.');
     // Anonymous demo: limits are per network address and Cloudflare location, not a global spend cap.
