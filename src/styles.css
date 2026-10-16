@@ -35,6 +35,8 @@ button, a { touch-action: manipulation; }
 .masthead nav { display: flex; align-items: center; gap: 30px; }
 .masthead nav a, .masthead nav button { display: inline-flex; align-items: center; gap: 8px; background: transparent; font-size: 12px; padding: 6px 0; }
 .masthead nav a:hover, .masthead nav button:hover { color: var(--accent); }
+.masthead nav .github-link { width: 44px; height: 44px; padding: 0; flex-shrink: 0; justify-content: center; border-radius: 50%; }
+.masthead nav .github-link:hover { background: #eeeee5; }
 .introduction { display: flex; justify-content: space-between; align-items: center; gap: 50px; padding: 43px 0 48px; }
 .eyebrow, .edition-label { font-size: 9px; font-weight: 600; letter-spacing: 1.6px; line-height: 1.5; }
 .introduction .eyebrow { margin: 0 0 20px; display: flex; gap: 8px; align-items: center; }
@@ -291,7 +293,8 @@ input[type='range']::-moz-range-thumb { width: 8px; height: 8px; background: #6b
   .masthead { height: 69px; }
   .wordmark { font-size: 8px; letter-spacing: .8px; }
   .brand-mark svg { width: 19px; }
-  .masthead nav a { display: none; }
+  .masthead nav { gap: 8px; }
+  .masthead nav .collection-nav-link { display: none; }
   .masthead nav button { font-size: 9px; gap: 5px; }
   .introduction { flex-direction: column; align-items: stretch; gap: 26px; padding: 35px 0 32px; }
   .introduction .eyebrow { font-size: 7px; letter-spacing: 1.05px; margin-bottom: 23px; }

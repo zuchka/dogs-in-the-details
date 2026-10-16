@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
   ArrowDown, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight,
-  Check, ChevronRight, Code2, Copy, Eye, EyeOff, Info, LoaderCircle,
+  Check, ChevronRight, Code2, Copy, Eye, EyeOff, Github, Info, LoaderCircle,
   LayoutGrid, Scan, ScanLine, Search, Share2, X,
 } from 'lucide-react';
 import type { Artwork, DisplayImage, Detection, DetectionResult, ImageSourceKind } from './types';
@@ -230,8 +230,9 @@ function App() {
         <header className="masthead">
           <a className="wordmark" href="/" aria-label="Dogs in the Details home"><span className="brand-mark"><ScanLine size={21} strokeWidth={1.6} /></span> DOGS IN THE DETAILS</a>
           <nav aria-label="Main navigation">
-            <a href="#collection">The collection <ArrowDown size={13} /></a>
+            <a className="collection-nav-link" href="#collection">The collection <ArrowDown size={13} /></a>
             <button onClick={() => setShowHow(true)}>How it works <ArrowUpRight size={14} /></button>
+            <a className="github-link" href="https://github.com/zuchka/dogs-in-the-details" target="_blank" rel="noreferrer" aria-label="View source on GitHub (opens in a new tab)" title="View source on GitHub"><Github size={19} strokeWidth={1.6} aria-hidden="true" /></a>
           </nav>
         </header>
 
